@@ -3,6 +3,8 @@ module app;
 import dlangui;
 import std.stdio;
 import std.conv;
+import std.file;
+import std.path;
 import dlangide.ui.frame;
 import dlangide.ui.commands;
 import dlangide.workspace.workspace;
@@ -20,6 +22,13 @@ mixin APP_ENTRY_POINT;
 
 /// entry point for dlangui based application
 extern (C) int UIAppMain(string[] args) {
+    // Configure logging - reduce verbosity to absolute minimum
+    import dlangui.core.logger : LogLevel;
+    
+    // Set log level to Fatal (minimum) to prevent excessive logging
+    Log.setLogLevel(LogLevel.Fatal);
+    // Confirm log level change using fatal level to ensure visibility
+    Log.f("DLangIDE log level set to Fatal to reduce verbosity");
 
     //debug(TestDMDTraceParser) {
     //    import dlangide.tools.d.dmdtrace;
@@ -34,9 +43,13 @@ extern (C) int UIAppMain(string[] args) {
         runParserTests();
     }
 
+    // D Completion Daemon logging config
     static if(__VERSION__ > 2100) {
         debug {
-            sharedLog = cast(shared)new FileLogger("dcd.log");
+            // Use NullLogger for DCD to reduce verbosity
+            sharedLog = cast(shared)new NullLogger();
+            // Uncomment the following line to enable DCD logging
+            // sharedLog = cast(shared)new FileLogger("dcd.log");
         } else {
             sharedLog = cast(shared)new NullLogger();
         }
@@ -44,7 +57,10 @@ extern (C) int UIAppMain(string[] args) {
     else
     {
         debug {
-            sharedLog = new FileLogger("dcd.log");
+            // Use NullLogger for DCD to reduce verbosity
+            sharedLog = new NullLogger();
+            // Uncomment the following line to enable DCD logging
+            // sharedLog = new FileLogger("dcd.log");
         } else {
             sharedLog = new NullLogger();
         }
@@ -94,11 +110,16 @@ extern (C) int UIAppMain(string[] args) {
     //version(USE_GDB_DEBUG) {
     //    debuggerTestGDB();
     //}
+    
+    // Display critical startup info only (at Fatal level)
+    Log.f("DLangIDE starting up");
+    
     version(unittest) {
         return 0;
     } else {
 
-        // create window
+        // create window (with minimal logging)
+        Log.f("Creating main application window");
         Window window = Platform.instance.createWindow("Dlang IDE", null, WindowFlag.Resizable, 900, 730);
         static if (BACKEND_GUI) {
             // set window icon
@@ -108,6 +129,7 @@ extern (C) int UIAppMain(string[] args) {
         //Widget w = new Widget();
         //pragma(msg, w.click.return_t, "", w.click.params_t);
 
+        Log.f("Creating IDE frame");
         IDEFrame frame = new IDEFrame(window);
 
         // Open project, if it specified in command line

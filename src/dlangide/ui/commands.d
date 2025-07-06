@@ -11,6 +11,7 @@ enum IDEActions : int {
     FileNewProject,
     FileOpen,
     FileOpenWorkspace,
+    FileOpenDirectory,
     FileSave,
     FileSaveAs,
     FileSaveAll,
@@ -56,6 +57,7 @@ enum IDEActions : int {
     WindowShowHomeScreen,
     WindowShowWorkspaceExplorer,
     WindowShowLogWindow,
+    WindowToggleTerminal,
 
     CreateNewWorkspace,
     AddToCurrentWorkspace,
@@ -109,6 +111,7 @@ const Action ACTION_FILE_NEW_PROJECT = new Action(IDEActions.FileNewProject, "ME
 const Action ACTION_FILE_NEW_WORKSPACE = new Action(IDEActions.FileNewWorkspace, "MENU_FILE_NEW_WORKSPACE"c);
 const Action ACTION_FILE_OPEN = new Action(IDEActions.FileOpen, "MENU_FILE_OPEN"c, "document-open", KeyCode.KEY_O, KeyFlag.Control);
 const Action ACTION_FILE_OPEN_WORKSPACE = new Action(IDEActions.FileOpenWorkspace, "MENU_FILE_OPEN_WORKSPACE"c, null, KeyCode.KEY_O, KeyFlag.Control | KeyFlag.Shift);
+const Action ACTION_FILE_OPEN_DIRECTORY = new Action(IDEActions.FileOpenDirectory, "MENU_FILE_OPEN_DIRECTORY"c, "folder-open", KeyCode.KEY_D, KeyFlag.Control | KeyFlag.Shift);
 const Action ACTION_FILE_SAVE = (new Action(IDEActions.FileSave, "MENU_FILE_SAVE"c, "document-save", KeyCode.KEY_S, KeyFlag.Control)).disableByDefault();
 const Action ACTION_FILE_SAVE_AS = (new Action(IDEActions.FileSaveAs, "MENU_FILE_SAVE_AS"c)).disableByDefault().disableByDefault();
 const Action ACTION_FILE_SAVE_ALL = (new Action(IDEActions.FileSaveAll, "MENU_FILE_SAVE_ALL"c, null, KeyCode.KEY_S, KeyFlag.Control | KeyFlag.Shift)).disableByDefault();
@@ -170,6 +173,7 @@ const Action ACTION_WINDOW_CLOSE_ALL_DOCUMENTS = new Action(IDEActions.WindowClo
 const Action ACTION_WINDOW_SHOW_HOME_SCREEN = new Action(IDEActions.WindowShowHomeScreen, "MENU_WINDOW_SHOW_HOME_SCREEN"c);
 const Action ACTION_WINDOW_SHOW_WORKSPACE_EXPLORER = new Action(IDEActions.WindowShowWorkspaceExplorer, "MENU_WINDOW_SHOW_WORKSPACE_EXPLORER"c).disableByDefault();
 const Action ACTION_WINDOW_SHOW_LOG_WINDOW = new Action(IDEActions.WindowShowLogWindow, "MENU_WINDOW_SHOW_LOG_WINDOW"c);
+const Action ACTION_WINDOW_TOGGLE_TERMINAL = new Action(IDEActions.WindowToggleTerminal, "MENU_WINDOW_TOGGLE_TERMINAL"c, "terminal", KeyCode.KEY_GRAVE, KeyFlag.Control);
 
 const Action ACTION_CREATE_NEW_WORKSPACE = new Action(IDEActions.CreateNewWorkspace, "OPTION_CREATE_NEW_WORKSPACE"c);
 const Action ACTION_ADD_TO_CURRENT_WORKSPACE = new Action(IDEActions.AddToCurrentWorkspace, "OPTION_ADD_TO_CURRENT_WORKSPACE"c);
@@ -192,7 +196,7 @@ const Action[] STD_IDE_ACTIONS = [
     ACTION_EDIT_INDENT, ACTION_EDIT_UNINDENT,
     ACTION_EDIT_TOGGLE_LINE_COMMENT, ACTION_EDIT_TOGGLE_BLOCK_COMMENT,
     ACTION_EDIT_PREFERENCES, 
-    ACTION_FILE_NEW_SOURCE_FILE, ACTION_FILE_NEW_WORKSPACE, ACTION_FILE_NEW_PROJECT, ACTION_FILE_OPEN_WORKSPACE, ACTION_FILE_OPEN,
+    ACTION_FILE_NEW_SOURCE_FILE, ACTION_FILE_NEW_WORKSPACE, ACTION_FILE_NEW_PROJECT, ACTION_FILE_OPEN_WORKSPACE, ACTION_FILE_OPEN, ACTION_FILE_OPEN_DIRECTORY,
     ACTION_FILE_SAVE, ACTION_FILE_SAVE_AS, ACTION_FILE_SAVE_ALL, ACTION_FILE_EXIT,
     ACTION_PROJECT_SET_STARTUP, ACTION_PROJECT_REFRESH, ACTION_PROJECT_UPDATE_DEPENDENCIES,
     ACTION_PROJECT_SETTINGS, ACTION_WORKSPACE_BUILD, ACTION_WORKSPACE_REBUILD, ACTION_WORKSPACE_CLEAN,
@@ -202,7 +206,7 @@ const Action[] STD_IDE_ACTIONS = [
     ACTION_DEBUG_STEP_INTO,
     ACTION_DEBUG_STEP_OVER,
     ACTION_DEBUG_STEP_OUT,
-    ACTION_WINDOW_CLOSE_DOCUMENT, ACTION_WINDOW_CLOSE_ALL_DOCUMENTS, ACTION_HELP_ABOUT,
+    ACTION_WINDOW_CLOSE_DOCUMENT, ACTION_WINDOW_CLOSE_ALL_DOCUMENTS, ACTION_WINDOW_TOGGLE_TERMINAL, ACTION_HELP_ABOUT,
     ACTION_GET_DOC_COMMENTS,
     ACTION_GO_TO_DEFINITION,
     ACTION_GET_COMPLETIONS,

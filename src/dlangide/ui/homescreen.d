@@ -38,10 +38,11 @@ class HomeScreen : ScrollWidget {
         _column1.addChild((new TextWidget(null, UIString.fromId("DESCRIPTION"c))).styleId("HOME_SCREEN_TITLE2"));
         _column1.addChild((new TextWidget(null, UIString.fromId("COPYRIGHT"c))).styleId("HOME_SCREEN_TITLE2"));
         _column1.addChild(new VSpacer());
-        _column1.addChild((new TextWidget(null, UIString.fromId("START_WITH"c))).styleId("HOME_SCREEN_TITLE"));
+        _column1.addChild((new TextWidget(null, UIString.fromId("START_WITH"c) ~ " (Open any folder as project)"d)).styleId("HOME_SCREEN_TITLE"));
         _startItems = new VerticalLayout();
         _recentItems = new VerticalLayout();
         _startItems.addChild(new ImageTextButton(ACTION_FILE_OPEN_WORKSPACE));
+        _startItems.addChild(new ImageTextButton(ACTION_FILE_OPEN_DIRECTORY));
         _startItems.addChild(new ImageTextButton(ACTION_FILE_NEW_WORKSPACE));
         _startItems.addChild(new ImageTextButton(ACTION_FILE_NEW_PROJECT));
         _column1.addChild(_startItems);

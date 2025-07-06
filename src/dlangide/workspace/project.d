@@ -40,7 +40,9 @@ class ProjectItem {
     protected dstring _name;
 
     this(string filename) {
+        Log.d("ProjectItem constructor - input: ", filename);
         _filename = buildNormalizedPath(filename);
+        Log.d("ProjectItem constructor - after buildNormalizedPath: ", _filename);
         _name = toUTF32(baseName(_filename));
     }
 
@@ -109,8 +111,8 @@ class ProjectItem {
     }
 }
 
-/// Project folder
-class ProjectFolder : ProjectItem {
+// Debug flag to trace folder path operations
+    private bool _debugPathOperations = true;
     protected ObjectList!ProjectItem _children;
 
     this(string filename) {
@@ -186,21 +188,73 @@ class ProjectFolder : ProjectItem {
         }
         return false;
     }
-
+    
+    // Default excluded directories
+    private static immutable string[] EXCLUDED_DIRS = [
+        "node_modules", ".git", ".svn", ".hg", ".vs", 
+        ".idea", ".vscode", "bin", "obj", "dist",
+        "build", "target", "out", "output", "logs",
+        ".venv", "__pycache__", "venv", "env", ".env",
+        "cache", ".cache", "tmp", ".tmp", "temp", ".temp",
+        "vendor", "packages", "dist-newstyle", "deps",
+        ".pytest_cache", "__pycache__", ".mypy_cache", ".hypothesis",
+        "bower_components", ".sass-cache", "coverage", "node_modules.nosync"
+    ];
+    
+    // Check if a directory should be excluded from indexing
+    private bool shouldExcludeDir(string dirName) {
+        import std.algorithm : canFind;
+        // Exclude all directories outside of our exact selection
+        if (dirName.startsWith(".."))
+            return true;
+        return EXCLUDED_DIRS.canFind(dirName);
+    }
+    
     void loadItems() {
         bool[string] loaded;
         string path = _filename;
+        Log.i("PROJECT: Loading items from path: ", _filename);
         if (exists(path) && isFile(path))
             path = dirName(path);
-        foreach(e; dirEntries(path, SpanMode.shallow)) {
-            string fn = baseName(e.name);
-            if (e.isDir) {
-                loadDir(fn);
-                loaded[fn] = true;
-            } else if (e.isFile) {
-                loadFile(fn);
-                loaded[fn] = true;
+        
+        // Make sure we have an absolute path but DON'T normalize it further
+        import std.path : isAbsolute, absolutePath;
+        if (!isAbsolute(path))
+            path = absolutePath(path);
+        
+        // Don't update the _filename with any modified path
+        // _filename = path; 
+        
+        Log.i("PROJECT: Scanning exact directory path: ", path);
+        try {
+            // Check if directory exists and is accessible
+            if (!exists(path)) {
+                Log.e("ERROR: Directory does not exist: ", path);
+                return;
             }
+            
+            if (!isDir(path)) {
+                Log.e("ERROR: Path is not a directory: ", path);
+                return;
+            }
+            
+            foreach(e; dirEntries(path, SpanMode.shallow)) {
+                string fn = baseName(e.name);
+                if (e.isDir) {
+                    if (!shouldExcludeDir(fn)) {
+                        loadDir(fn);
+                        loaded[fn] = true;
+                    } else {
+                        Log.v("Skipping excluded directory: ", fn);
+                    }
+                } else if (e.isFile) {
+                    loadFile(fn);
+                    loaded[fn] = true;
+                }
+            }
+        } catch (Exception e) {
+            Log.e("Error scanning directory ", path, ": ", e.msg);
+            // Continue with partial results - don't crash
         }
         // removing non-reloaded items
         for (int i = _children.count - 1; i >= 0; i--) {
@@ -261,6 +315,8 @@ class WorkspaceItem {
 
     this(string fname = null) {
         filename = fname;
+        Log.d("WorkspaceItem constructor - input fname: ", fname);
+        Log.d("WorkspaceItem constructor - _filename after setter: ", _filename);
     }
 
     /// file name of workspace item
@@ -272,8 +328,11 @@ class WorkspaceItem {
     /// file name of workspace item
     @property void filename(string fname) {
         if (fname.length > 0) {
+            Log.d("WorkspaceItem.filename setter - input: ", fname);
             _filename = buildNormalizedPath(fname);
+            Log.d("WorkspaceItem.filename setter - after buildNormalizedPath: ", _filename);
             _dir = dirName(filename);
+            Log.d("WorkspaceItem.filename setter - _dir: ", _dir);
         } else {
             _filename = null;
             _dir = null;
@@ -417,16 +476,27 @@ class Project : WorkspaceItem {
     this(Workspace ws, string fname = null, string dependencyVersion = null) {
         super(fname);
         _workspace = ws;
+        Log.d("Project constructor - filename: ", fname);
+        Log.d("Project _filename after super: ", _filename);
+        
+        // No need to initialize excluded directories anymore
 
         if (_workspace) {
     		foreach(obj; _workspace.includePath.array)
     			includePath ~= obj.str;
         }
 
-        _items = new ProjectFolder(fname.dirName);
+        // Handle both file paths and directory paths
+        if (fname && fname.exists && fname.isDir) {
+            _items = new ProjectFolder(fname);
+            _projectFile = new SettingsFile();
+        } else {
+            _items = new ProjectFolder(fname.dirName);
+            _projectFile = new SettingsFile(fname);
+        }
+        
         _dependencyVersion = dependencyVersion;
         _isDependency = _dependencyVersion.length > 0;
-        _projectFile = new SettingsFile(fname);
     }
 
     void setBaseProject(Project p) {
@@ -799,11 +869,84 @@ class Project : WorkspaceItem {
         return true;
     }
 
+    Log.f("PROJECT: loadAsDirectory called with path: ", _filename);
+        
+        // Create a backup of the original path
+        string originalPath = _filename.dup;
+        Log.f("PROJECT: Original path: ", originalPath);
+        
+        // Verify directory exists
+        if (!_filename.exists) {
+            Log.f("PROJECT ERROR: Directory does not exist: ", _filename);
+            return false;
+        }
+        
+        Log.f("PROJECT ERROR: Path is not a directory: ", _filename);
+            return false;
+        }
+        
+        try {
+            Log.e("PROJECT: Loading directory as project: ", _filename);
+            
+            // Initialize basic project settings
+            _projectFile = new SettingsFile();
+            
+            // Ensure we have an absolute path but DON'T normalize it further
+            Log.f("PROJECT: Converting to absolute path");
+                _filename = absolutePath(_filename);
+                Log.f("PROJECT: Absolute path: ", _filename);
+            }
+            
+            // Remove trailing slash if present for consistency
+            if (_filename.endsWith("/") || _filename.endsWith("\\")) {
+                _filename = _filename[0..$-1];
+                Log.f("PROJECT: Removed trailing slash: ", _filename);
+            }
+            
+            Log.f("PROJECT: Using exact project path: ", _filename);
+            
+            // Use the basename for the project name
+            string projectName = _filename.baseName;
+            Log.f("PROJECT: Setting project name to: ", projectName);
+            _projectFile.setting.setString("name", projectName);
+            
+            // Set up source paths - just use the directory itself
+            _sourcePaths = ["."];
+            
+            // Use the default configuration
+            _configurations = [ProjectConfiguration.DEFAULT];
+            Log.f("PROJECT: Creating project folder with path: ", _filename);
+            _items = new ProjectFolder(_filename);
+            
+            if (_items is null) {
+                Log.f("PROJECT ERROR: Failed to create project folder");
+                return false;
+            }
+            
+            Log.f("PROJECT: Created project folder with exact path: ", _items.filename);
+            
+            // Load directory contents
+            Log.f("PROJECT: Loading directory contents");
+            _items.loadItems(); // This method doesn't return a value
+            
+            Log.f("PROJECT: Successfully loaded directory items for: ", _filename);
+            return true;
+        } catch (Exception e) {
+            Log.f("PROJECT ERROR: Exception while loading directory: ", e.msg);
+            return false;
+        }
+    }
+
     override bool load(string fname = null) {
         if (!_projectFile)
             _projectFile = new SettingsFile();
         if (fname.length > 0)
             filename = fname;
+        
+        // Check if this is a directory without a project file
+        if (_filename.exists && _filename.isDir && !isProjectFile(_filename)) {
+            Log.f("PROJECT: Detected directory path, calling loadAsDirectory for: ", _filename);
+            
         if (!_projectFile.load(_filename)) {
             Log.e("failed to load project from file ", _filename);
             return false;

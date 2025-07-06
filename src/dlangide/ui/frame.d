@@ -16,6 +16,7 @@ import dlangui.dialogs.filedlg;
 import dlangui.dialogs.settingsdialog;
 import dlangui.core.stdaction;
 import dlangui.core.files;
+import std.file : exists, isDir;
 
 import dlangide.ui.commands;
 import dlangide.ui.wspanel;
@@ -27,6 +28,7 @@ import dlangide.ui.dsourceedit;
 import dlangide.ui.homescreen;
 import dlangide.ui.settings;
 import dlangide.ui.debuggerui;
+import dlangide.ui.dialogs.projectdirdialog;
 
 import dlangide.workspace.workspace;
 import dlangide.workspace.project;
@@ -514,6 +516,33 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         _tabs.removeTab(HOME_SCREEN_ID);
     }
 
+    static immutable TERMINAL_DOCK_ID = "TERMINAL_DOCK";
+    void toggleTerminal() {
+        auto terminalDock = _dockHost.findDockWindowById!DockWindow(TERMINAL_DOCK_ID);
+        if (terminalDock) {
+            // Terminal exists, toggle visibility
+            terminalDock.visibility = terminalDock.visibility == Visibility.Visible ? 
+                Visibility.Gone : Visibility.Visible;
+            if (terminalDock.visibility == Visibility.Visible)
+                terminalDock.setFocus();
+        } else {
+            // Create new terminal widget
+            import dlangide.ui.terminal;
+            auto terminalWidget = new TerminalWidget("TERMINAL_WIDGET");
+            
+            // Create dock window for terminal
+            terminalDock = new DockWindow(TERMINAL_DOCK_ID);
+            terminalDock.caption = "Terminal"d;
+            terminalDock.dockAlignment = DockAlignment.Bottom;
+            terminalDock.layoutHeight = 200;
+            terminalDock.bodyWidget = terminalWidget;
+            
+            // Add terminal to dock host
+            _dockHost.addDockedWindow(terminalDock);
+            terminalDock.setFocus();
+        }
+    }
+
     void onTabChanged(string newActiveTabId, string previousTabId) {
         int index = _tabs.tabIndex(newActiveTabId);
         if (index >= 0) {
@@ -747,7 +776,7 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         MenuItem fileNewItem = new MenuItem(new Action(1, "MENU_FILE_NEW"));
         fileNewItem.add(ACTION_FILE_NEW_SOURCE_FILE, ACTION_FILE_NEW_WORKSPACE, ACTION_FILE_NEW_PROJECT);
         fileItem.add(fileNewItem);
-        fileItem.add(ACTION_FILE_OPEN_WORKSPACE, ACTION_FILE_OPEN, 
+        fileItem.add(ACTION_FILE_OPEN_WORKSPACE, ACTION_FILE_OPEN, ACTION_FILE_OPEN_DIRECTORY,
             ACTION_FILE_SAVE, ACTION_FILE_SAVE_AS, ACTION_FILE_SAVE_ALL, ACTION_FILE_WORKSPACE_CLOSE, ACTION_FILE_EXIT);
 
         MenuItem editItem = new MenuItem(new Action(2, "MENU_EDIT"));
@@ -822,7 +851,7 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
 
         MenuItem windowItem = new MenuItem(new Action(3, "MENU_WINDOW"c));
         //windowItem.add(new Action(30, "MENU_WINDOW_PREFERENCES"));
-        windowItem.add(ACTION_WINDOW_CLOSE_DOCUMENT, ACTION_WINDOW_CLOSE_ALL_DOCUMENTS);
+        windowItem.add(ACTION_WINDOW_CLOSE_DOCUMENT, ACTION_WINDOW_CLOSE_ALL_DOCUMENTS, ACTION_WINDOW_TOGGLE_TERMINAL);
 
         MenuItem helpItem = new MenuItem(new Action(4, "MENU_HELP"c));
         helpItem.add(ACTION_HELP_VIEW_HELP, ACTION_HELP_ABOUT, ACTION_HELP_DONATE);
@@ -864,7 +893,7 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         tb = res.getOrAddToolbar("Standard");
         tb.addButtons(ACTION_FILE_OPEN, ACTION_FILE_SAVE, ACTION_SEPARATOR);
 
-        tb.addButtons(ACTION_DEBUG_START);
+        tb.addButtons(ACTION_DEBUG_START, ACTION_WINDOW_TOGGLE_TERMINAL);
         
         _projectConfigurationCombo = new ToolBarComboBox("projectConfig", [ProjectConfiguration.DEFAULT_NAME.to!dstring]);//Updateable
         _projectConfigurationCombo.action = ACTION_PROJECT_CONFIGURATIONS;
@@ -1091,6 +1120,9 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
                 case IDEActions.ToolsOpenDMDTraceLog:
                     openDMDTraceLog();
                     return true;
+                case IDEActions.WindowToggleTerminal:
+                    toggleTerminal();
+                    return true;
                 case IDEActions.HelpAbout:
                     //debug {
                     //    testDCDFailAfterThreadCreation();
@@ -1272,8 +1304,10 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
                     }
                     // Ask user for workspace to open
                     UIString caption = UIString.fromId("HEADER_OPEN_WORKSPACE_OR_PROJECT"c);
-                    FileDialog dlg = createFileDialog(caption);
+                    FileDialog dlg = createFileDialog(caption, DialogFlag.Modal | DialogFlag.Resizable | FileDialogFlag.EnableCreateDirectory);
                     dlg.addFilter(FileFilterEntry(UIString.fromId("WORKSPACE_AND_PROJECT_FILES"c), "*.dlangidews;dub.json;dub.sdl;package.json"));
+                    dlg.addFilter(FileFilterEntry(UIString.fromRaw("All Files"d), "*"));
+                    dlg.allowMultipleFiles = false;
                     dlg.path = _settings.getRecentPath("FILE_OPEN_WORKSPACE_PATH");
                     dlg.dialogResult = delegate(Dialog d, const Action result) {
                         if (result.id == ACTION_OPEN.id) {
@@ -1285,6 +1319,135 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
                         }
                     };
                     dlg.show();
+                    return true;
+                case IDEActions.FileOpenDirectory:
+                    // Open directory as project
+                    UIString dirCaption = UIString.fromRaw("Open Directory as Project"d);
+                    
+                    // Get recent directory path if available, otherwise use home directory
+                    import std.process : environment;
+                    string homeDir = environment.get("HOME", "/home/kirik");
+                    string initialPath = _settings.getRecentPath("FILE_OPEN_DIRECTORY_PATH");
+                    if (initialPath.length == 0 || !initialPath.exists || !initialPath.isDir) {
+                        // Default to home directory
+                        initialPath = homeDir;
+                    }
+                    
+                    Log.f("Opening directory dialog for project with initial path: ", initialPath);
+                    
+                    // Create custom project directory dialog that tracks user selection
+                    ProjectDirectoryDialog dirDlg = new ProjectDirectoryDialog(
+                        dirCaption, window, null,
+                        DialogFlag.Modal | DialogFlag.Resizable | 
+                        FileDialogFlag.SelectDirectory | FileDialogFlag.FileMustExist |
+                        FileDialogFlag.EnableCreateDirectory);
+                    
+                    // Set the initial path
+                    dirDlg.path = initialPath;
+                    
+                    // Store direct reference to dialog for capturing selection
+                    ProjectDirectoryDialog capturedDlg = dirDlg;
+                    
+                    // Handle the dialog result
+                    dirDlg.dialogResult = delegate(Dialog d, const Action result) {
+                        Log.f("Directory dialog result: ", result.id);
+                        
+                        // Check for both OPEN actions since the dialog might return either
+                        if (result.id == ACTION_OPEN.id || result.id == ACTION_OPEN_DIRECTORY.id) {
+                            // Get the selected directory path - try multiple approaches
+                            string dirname = "";
+                            
+                            // 1. Try the string parameter in the action - this has the user selection from our custom dialog
+                            if (result.stringParam && result.stringParam.length > 0) {
+                                dirname = result.stringParam;
+                                Log.f("Got directory from result.stringParam: ", dirname);
+                            }
+                            
+                            // 2. If stringParam is empty, try to get userSelectedDir from the dialog
+                            if (dirname.length == 0) {
+                                ProjectDirectoryDialog pd = cast(ProjectDirectoryDialog)d;
+                                if (pd) {
+                                    // Get the directory the user specifically selected
+                                    dirname = pd.userSelectedDir;
+                                    Log.f("Got directory from dialog userSelectedDir: ", dirname);
+                                    
+                                    // If still empty, fall back to standard path+filename
+                                    if (dirname.length == 0) {
+                                        if (pd.filename.length > 0) {
+                                            if (pd.path.endsWith("/") || pd.path.endsWith("\\")) {
+                                                dirname = pd.path ~ pd.filename;
+                                            } else {
+                                                dirname = pd.path ~ "/" ~ pd.filename;
+                                            }
+                                            Log.f("Got directory from dialog path+filename: ", dirname);
+                                        } else {
+                                            dirname = pd.path;
+                                            Log.f("Got directory from dialog path: ", dirname);
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // 3. Use captured dialog as last resort
+                            if (dirname.length == 0 && capturedDlg !is null) {
+                                // Get the directory the user specifically selected
+                                dirname = capturedDlg.userSelectedDir;
+                                Log.f("Got directory from captured dialog userSelectedDir: ", dirname);
+                                
+                                // If still empty, use standard path
+                                if (dirname.length == 0) {
+                                    dirname = capturedDlg.path;
+                                    if (capturedDlg.filename.length > 0) {
+                                        if (dirname.endsWith("/") || dirname.endsWith("\\")) {
+                                            dirname ~= capturedDlg.filename;
+                                        } else {
+                                            dirname ~= "/" ~ capturedDlg.filename;
+                                        }
+                                    }
+                                    Log.f("Got directory from captured dialog path: ", dirname);
+                                }
+                            }
+                            
+                            Log.f("FINAL selected directory path: ", dirname);
+                            
+                            if (dirname.length) {
+                                // Ensure absolute path but DON'T normalize it or change it
+                                import std.path : isAbsolute, absolutePath;
+                                if (!isAbsolute(dirname))
+                                    dirname = absolutePath(dirname);
+                                
+                                // Verify directory exists and is valid
+                                if (!exists(dirname)) {
+                                    Log.f("ERROR: Directory does not exist: ", dirname);
+                                    window.showMessageBox(UIString.fromRaw("Error"d), 
+                                        UIString.fromRaw("The selected directory does not exist."d));
+                                    return;
+                                } 
+                                
+                                if (!isDir(dirname)) {
+                                    Log.f("ERROR: Path is not a directory: ", dirname);
+                                    window.showMessageBox(UIString.fromRaw("Error"d), 
+                                        UIString.fromRaw("The selected path is not a directory."d));
+                                    return;
+                                }
+                                
+                                Log.f("Opening directory: ", dirname);
+                                
+                                // Save the selected path BEFORE opening it (in case opening fails)
+                                _settings.setRecentPath(dirname, "FILE_OPEN_DIRECTORY_PATH");
+                                
+                                // Now open the directory - EXACT path as selected
+                                openFileOrWorkspace(dirname);
+                            } else {
+                                Log.f("ERROR: Empty directory path returned from dialog");
+                                window.showMessageBox(UIString.fromRaw("Error"d), 
+                                    UIString.fromRaw("No directory was selected."d));
+                            }
+                        }
+                    };
+                    
+                    // Show the dialog
+                    dirDlg.show();
                     return true;
                 case IDEActions.GoToDefinition:
                     if (currentEditor) {
@@ -1780,6 +1943,29 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
     }
 
     void openFileOrWorkspace(string filename) {
+        Log.i("DIRECTORY SELECTION: openFileOrWorkspace called with: ", filename);
+        // Get detailed path information
+        import std.path : isAbsolute, absolutePath, buildNormalizedPath, baseName, dirName, extension;
+        
+        // Store original user selection before any modifications
+        string userSelectedPath = filename;
+        Log.f("USER EXACT SELECTION: ", userSelectedPath);
+        
+        // Ensure we have an absolute path but preserve format otherwise
+        if (!isAbsolute(filename))
+            filename = absolutePath(filename);
+        else
+            userSelectedPath = filename; // Update user path if it was already absolute
+            
+        // CRITICAL: Use exactly what the user selected - no normalization
+        
+        Log.i("DIRECTORY SELECTION: OPENING PATH: ", filename);
+        Log.i("DIRECTORY SELECTION: USER SELECTED PATH: ", userSelectedPath);
+        Log.i("DIRECTORY SELECTION: Path exists? ", exists(filename) ? "yes" : "no");
+        Log.i("DIRECTORY SELECTION: Is directory? ", isDir(filename) ? "yes" : "no");
+        Log.i("DIRECTORY SELECTION: Basename: ", baseName(filename));
+        Log.i("DIRECTORY SELECTION: Directory name: ", dirName(filename));
+        
         // Open DlangIDE workspace file
         if (filename.isWorkspaceFile) {
             Workspace ws = new Workspace(this);
@@ -1833,6 +2019,126 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
             } else {
                 // new workspace file
                 createNewWorkspaceForExistingProject(project);
+            }
+        } else if (filename.exists && filename.isDir) {
+            // Handle opening a generic directory as a project
+            _logPanel.clear();
+            _logPanel.logLine("Opening directory as project: "d ~ toUTF32(userSelectedPath));
+            
+            // Critical logging with error level for visibility
+            Log.f("Opening directory as project: ", userSelectedPath);
+            Log.f("Directory path type: ", typeid(userSelectedPath));
+            Log.f("Directory path length: ", userSelectedPath.length);
+            
+            // Double-check that it exists and is a directory
+            if (!exists(filename)) {
+                Log.f("ERROR: Directory does not exist: ", userSelectedPath);
+                _logPanel.logLine("Error: Directory does not exist: "d ~ toUTF32(userSelectedPath));
+                window.showMessageBox(UIString.fromRaw("Error"d), 
+                    UIString.fromRaw("The selected directory does not exist: "d ~ toUTF32(userSelectedPath)));
+                return;
+            }
+            
+            if (!isDir(filename)) {
+                Log.f("ERROR: Path is not a directory: ", userSelectedPath);
+                _logPanel.logLine("Error: Selected path is not a directory: "d ~ toUTF32(userSelectedPath));
+                window.showMessageBox(UIString.fromRaw("Error"d), 
+                    UIString.fromRaw("The selected path is not a directory: "d ~ toUTF32(userSelectedPath)));
+                return;
+            }
+            
+            // Use the EXACT path provided by the user without modification
+            Log.f("USER SELECTED DIRECTORY: ", userSelectedPath);
+            Log.f("Creating project for directory: ", userSelectedPath);
+            
+            // Honor user selection exactly - only adjust trailing slash for Project class requirements
+            string projectPath = userSelectedPath;
+            // Only remove trailing slash if present to maintain compatibility with Project class
+            if (projectPath.endsWith("/") || projectPath.endsWith("\\")) {
+                projectPath = projectPath[0..$-1]; // Remove trailing slash for Project class compatibility
+            }
+            
+            Log.f("Using project path: ", projectPath);
+            Project project = new Project(currentWorkspace, projectPath);
+            project.name = toUTF32(baseName(projectPath));
+            Log.f("Created project with filename: ", project.filename);
+            
+            if (currentWorkspace) {
+                Log.f("Current workspace exists, showing options dialog");
+                window.showMessageBox(UIString.fromId("MSG_OPEN_PROJECT"c), UIString.fromId("QUESTION_NEW_WORKSPACE"c),
+                    [ACTION_ADD_TO_CURRENT_WORKSPACE, ACTION_CREATE_NEW_WORKSPACE, ACTION_CANCEL], 0, delegate(const Action result) {
+                        Log.f("Workspace dialog result: ", result.id);
+                        if (result.id == IDEActions.CreateNewWorkspace) {
+                            // Create new workspace
+                            Log.f("Creating new workspace for project");
+                            try {
+                                // Load directory using user-selected path to ensure exact selection is used
+                                Log.f("Calling loadAsDirectory() on project with user-selected path: ", project.filename);
+                                Log.f("Original user selection: ", userSelectedPath);
+                                if (project.loadAsDirectory()) {
+                                    Log.f("Project directory loaded successfully");
+                                    createNewWorkspaceForExistingProject(project);
+                                    hideHomeScreen();
+                                } else {
+                                    Log.f("Failed to load directory as project");
+                                    window.showMessageBox(UIString.fromRaw("Error"d), 
+                                        UIString.fromRaw("Failed to load directory structure."d));
+                                }
+                            } catch (Exception e) {
+                                Log.f("Exception loading directory: ", e.msg);
+                                window.showMessageBox(UIString.fromRaw("Error"d), 
+                                    UIString.fromRaw("Error loading directory: "d ~ toUTF32(e.msg)));
+                            }
+                        } else if (result.id == IDEActions.AddToCurrentWorkspace) {
+                            // Add to current workspace
+                            Log.f("Adding project to current workspace");
+                            currentWorkspace.addProject(project);
+                            
+                            try {
+                                // Load directory contents using user-selected path
+                                Log.f("Calling loadAsDirectory() on project with user-selected path: ", project.filename);
+                                Log.f("Original user selection: ", userSelectedPath);
+                                if (project.loadAsDirectory()) {
+                                    Log.f("Project directory loaded successfully");
+                                    currentWorkspace.save();
+                                    updateTreeGraph();
+                                    hideHomeScreen();
+                                } else {
+                                    Log.f("Failed to load directory as project");
+                                    window.showMessageBox(UIString.fromRaw("Error"d), 
+                                        UIString.fromRaw("Failed to load directory structure."d));
+                                }
+                            } catch (Exception e) {
+                                Log.f("Exception loading directory: ", e.msg);
+                                window.showMessageBox(UIString.fromRaw("Error"d), 
+                                    UIString.fromRaw("Error loading directory: "d ~ toUTF32(e.msg)));
+                            }
+                        } else {
+                            Log.f("User cancelled workspace selection");
+                        }
+                        return true;
+                    });
+            } else {
+                // Create new workspace file
+                Log.f("No current workspace, creating new one");
+                
+                try {
+                    // Load directory contents first, using exact user selection
+                    Log.f("Calling loadAsDirectory() on project with user-selected path: ", project.filename);
+                    Log.f("Original user selection: ", userSelectedPath);
+                    if (project.loadAsDirectory()) {
+                        Log.f("Project directory loaded successfully");
+                        createNewWorkspaceForExistingProject(project);
+                    } else {
+                        Log.f("Failed to load directory as project");
+                        window.showMessageBox(UIString.fromRaw("Error"d), 
+                            UIString.fromRaw("Failed to load directory structure."d));
+                    }
+                } catch (Exception e) {
+                    Log.f("Exception loading directory: ", e.msg);
+                    window.showMessageBox(UIString.fromRaw("Error"d), 
+                        UIString.fromRaw("Error loading directory: "d ~ toUTF32(e.msg)));
+                }
             }
         } else {
             _logPanel.logLine("File is not recognized as DlangIDE project or workspace file");
