@@ -1,0 +1,9 @@
+{
+    "includePath": {
+    },
+    "name": "dnives",
+    "description": "Command-line tool to handle files opened from Dolphin file manager",
+    "projects": {
+        "dnives": "dub.json"
+    }
+}

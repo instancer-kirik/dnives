@@ -1,0 +1,641 @@
+module dcore.editor.syntax.tokenizer;
+
+import std.regex;
+import std.string;
+import std.array;
+import std.uni;
+import std.conv;
+import std.algorithm;
+import std.stdio;
+
+enum TokenType {
+    text,
+    keyword,
+    identifier,
+    operator,
+    string,
+    number,
+    comment
+}
+
+/**
+ * Token - Represents a syntax token
+ */
+struct Token {
+    int position;          // Character position in line
+    int length;            // Token length in characters
+    string type;           // Token type (keyword, string, etc.)
+    int lineIndex;         // Line index in document
+    string text;           // Token text
+    
+    /**
+     * Constructor
+     */
+    this(int position, int length, string type, int lineIndex, string text) {
+        this.position = position;
+        this.length = length;
+        this.type = type;
+        this.lineIndex = lineIndex;
+        this.text = text;
+    }
+}
+
+/**
+ * Tokenizer - Base class for syntax tokenizers
+ */
+class Tokenizer {
+    protected {
+        string[] keywords;        // Language keywords
+        string rxKeywordPattern;   // Keyword regex pattern
+        string rxStringPattern;    // String regex pattern
+        string rxNumberPattern;    // Number regex pattern
+        string rxCommentPattern;   // Comment regex pattern
+        string rxIdentifierPattern;// Identifier regex pattern
+        string rxOperatorPattern;  // Operator regex pattern
+        
+        // Regex objects for actual pattern matching
+        Regex!char rxKeyword;     // Keyword regex
+        Regex!char rxString;      // String regex
+        Regex!char rxNumber;      // Number regex
+        Regex!char rxComment;     // Comment regex
+        Regex!char rxIdentifier;  // Identifier regex
+        Regex!char rxOperator;    // Operator regex
+    }
+    
+    /**
+     * Constructor
+     */
+    this() {
+        // Default constructor
+    }
+    
+    /**
+     * Get name of tokenizer
+     */
+    string getName() {
+        return "Generic";
+    }
+    
+    /**
+     * Get tokenizer description
+     */
+    string getDescription() {
+        return "Generic tokenizer";
+    }
+    
+    /**
+     * Get supported file extensions
+     */
+    string[] getFileExtensions() {
+        return [];
+    }
+    
+    /**
+     * Get supported languages
+     */
+    string[] getLanguages() {
+        return [];
+    }
+    
+    /**
+     * Tokenize text into syntax tokens
+     */
+    Token[][] tokenize(dstring[] lines) {
+        Token[][] result;
+        
+        // Tokenize each line
+        for (int i = 0; i < lines.length; i++) {
+            result ~= tokenizeLine(lines[i], i);
+        }
+        
+        // Process multi-line tokens if needed
+        processMultiLineTokens(result, lines);
+        
+        return result;
+    }
+    
+    /**
+     * Check if this tokenizer supports the given file
+     */
+    bool supportsFile(string filename) {
+        import std.path : extension;
+        string ext = extension(filename);
+        if (ext.length > 0 && ext[0] == '.')
+            ext = ext[1..$];
+            
+        return getFileExtensions().canFind(ext);
+    }
+    
+    /// Tokenize a single line
+    Token[] tokenizeLine(dstring text, int lineIndex) {
+        Token[] tokens;
+        string strText = to!string(text);
+        
+        // Find all tokens in the line
+        int pos = 0;
+        while (pos < strText.length) {
+            // Skip whitespace
+            if (std.uni.isWhite(strText[pos])) {
+                pos++;
+                continue;
+            }
+            
+            bool foundMatch = false;
+            
+            // Try to match a comment
+            auto commentMatch = Captures!(string).init;
+            try {
+                if (this.rxComment != Regex!char.init)
+                    commentMatch = matchFirst(strText[pos..$], this.rxComment);
+            } catch (Exception e) {
+                // Skip if regex is invalid
+            }
+            if (!commentMatch.empty) {
+                tokens ~= Token(pos, cast(int)commentMatch.hit.length, "comment", lineIndex, commentMatch.hit);
+                pos += cast(int)commentMatch.hit.length;
+                foundMatch = true;
+                continue;
+            }
+            
+            // Try to match a string
+            auto stringMatch = Captures!(string).init;
+            try {
+                if (this.rxString != Regex!char.init)
+                    stringMatch = matchFirst(strText[pos..$], this.rxString);
+            } catch (Exception e) {
+                // Skip if regex is invalid
+            }
+            if (!stringMatch.empty) {
+                tokens ~= Token(pos, cast(int)stringMatch.hit.length, "string", lineIndex, stringMatch.hit);
+                pos += cast(int)stringMatch.hit.length;
+                foundMatch = true;
+                continue;
+            }
+            
+            // Try to match a number
+            auto numberMatch = Captures!(string).init;
+            try {
+                if (this.rxNumber != Regex!char.init)
+                    numberMatch = matchFirst(strText[pos..$], this.rxNumber);
+            } catch (Exception e) {
+                // Skip if regex is invalid
+            }
+            if (!numberMatch.empty) {
+                tokens ~= Token(pos, cast(int)numberMatch.hit.length, "number", lineIndex, numberMatch.hit);
+                pos += cast(int)numberMatch.hit.length;
+                foundMatch = true;
+                continue;
+            }
+            
+            // Try to match a keyword
+            auto keywordMatch = Captures!(string).init;
+            try {
+                if (this.rxKeyword != Regex!char.init)
+                    keywordMatch = matchFirst(strText[pos..$], this.rxKeyword);
+            } catch (Exception e) {
+                // Skip if regex is invalid
+            }
+            if (!keywordMatch.empty) {
+                tokens ~= Token(pos, cast(int)keywordMatch.hit.length, "keyword", lineIndex, keywordMatch.hit);
+                pos += cast(int)keywordMatch.hit.length;
+                foundMatch = true;
+                continue;
+            }
+            
+            // Try to match an identifier
+            auto identifierMatch = Captures!(string).init;
+            try {
+                if (this.rxIdentifier != Regex!char.init)
+                    identifierMatch = matchFirst(strText[pos..$], this.rxIdentifier);
+            } catch (Exception e) {
+                // Skip if regex is invalid
+            }
+            if (!identifierMatch.empty) {
+                tokens ~= Token(pos, cast(int)identifierMatch.hit.length, "identifier", lineIndex, identifierMatch.hit);
+                pos += cast(int)identifierMatch.hit.length;
+                foundMatch = true;
+                continue;
+            }
+            
+            // Try to match an operator
+            auto operatorMatch = Captures!(string).init;
+            try {
+                if (this.rxOperator != Regex!char.init)
+                    operatorMatch = matchFirst(strText[pos..$], this.rxOperator);
+            } catch (Exception e) {
+                // Skip if regex is invalid
+            }
+            if (!operatorMatch.empty) {
+                tokens ~= Token(pos, cast(int)operatorMatch.hit.length, "operator", lineIndex, operatorMatch.hit);
+                pos += cast(int)operatorMatch.hit.length;
+                foundMatch = true;
+                continue;
+            }
+            
+            // If no match found, treat as plain text
+            if (!foundMatch) {
+                tokens ~= Token(pos, 1, "text", lineIndex, [strText[pos]].idup);
+                pos++;
+            }
+        }
+        
+        return tokens;
+    }
+    
+    /// Process multiline tokens
+    void processMultiLineTokens(Token[][] tokens, dstring[] lines) {
+        // The generic tokenizer doesn't handle multi-line tokens
+        // More advanced tokenizers would implement this
+    }
+}
+
+/**
+ * JavaScriptTokenizer - Tokenizer for JavaScript syntax
+ */
+class JavaScriptTokenizer : Tokenizer {
+    /**
+     * Constructor
+     */
+    this() {
+        super();
+        
+        // Set JavaScript keywords
+        keywords = [
+            "break", "case", "catch", "class", "const", "continue", "debugger",
+            "default", "delete", "do", "else", "export", "extends", "false",
+            "finally", "for", "function", "if", "import", "in", "instanceof",
+            "new", "null", "return", "super", "switch", "this", "throw", "true",
+            "try", "typeof", "var", "void", "while", "with", "let", "yield",
+            "async", "await", "static", "get", "set", "of", "from"
+        ];
+        
+        // Initialize regexes
+        initializeRegexes();
+    }
+    
+    /**
+     * Get name of tokenizer
+     */
+    override string getName() {
+        return "JavaScript";
+    }
+    
+    /**
+     * Get tokenizer description
+     */
+    override string getDescription() {
+        return "JavaScript syntax tokenizer";
+    }
+    
+    /**
+     * Get supported file extensions
+     */
+    override string[] getFileExtensions() {
+        return ["js", "jsx", "mjs"];
+    }
+    
+    /**
+     * Get supported languages
+     */
+    override string[] getLanguages() {
+        return ["javascript", "js"];
+    }
+    
+    /**
+     * Initialize regular expressions
+     */
+    private void initializeRegexes() {
+        // Create keyword pattern from keywords list
+        string keywordPattern = `\b(` ~ join(keywords, "|") ~ `)\b`;
+        this.rxKeyword = regex(keywordPattern);
+        
+        // String patterns (including template literals)
+        // Use string concatenation to avoid backtick issues
+        this.rxString = regex(`"[^"]*"|'[^']*'`);
+        
+        // Number pattern
+        this.rxNumber = regex(`\d+|\d+\.\d+|0x[0-9a-fA-F]+`);
+        
+        // Comment pattern
+        this.rxComment = regex(`/\*.*\*/`);
+        
+        // Identifier pattern
+        this.rxIdentifier = regex(`[a-zA-Z_][a-zA-Z0-9_]*`);
+        
+        // Operator pattern
+        this.rxOperator = regex(`[+\-*/%=&|^~<>!?:;,.\[\]{}()]`);
+    }
+    
+    /// Tokenize a single line
+    override Token[] tokenizeLine(dstring text, int lineIndex) {
+        Token[] tokens;
+        string strText = to!string(text);
+        
+        // Find all tokens in the line
+        int pos = 0;
+        while (pos < strText.length) {
+            // Skip whitespace
+            if (std.uni.isWhite(strText[pos])) {
+                pos++;
+                continue;
+            }
+            
+            bool foundMatch = false;
+            
+            // Try to match a comment
+            auto commentMatch = Captures!(string).init;
+            try {
+                if (this.rxComment != Regex!char.init)
+                    commentMatch = matchFirst(strText[pos..$], this.rxComment);
+            } catch (Exception e) {
+                // Skip if regex is invalid
+            }
+            if (!commentMatch.empty) {
+                tokens ~= Token(pos, cast(int)commentMatch.hit.length, "comment", lineIndex, commentMatch.hit);
+                pos += cast(int)commentMatch.hit.length;
+                foundMatch = true;
+                continue;
+            }
+            
+            // Try to match a string
+            auto stringMatch = Captures!(string).init;
+            try {
+                if (this.rxString != Regex!char.init)
+                    stringMatch = matchFirst(strText[pos..$], this.rxString);
+            } catch (Exception e) {
+                // Skip if regex is invalid
+            }
+            if (!stringMatch.empty) {
+                tokens ~= Token(pos, cast(int)stringMatch.hit.length, "string", lineIndex, stringMatch.hit);
+                pos += cast(int)stringMatch.hit.length;
+                foundMatch = true;
+                continue;
+            }
+            
+            // Try to match a number
+            auto numberMatch = Captures!(string).init;
+            try {
+                if (this.rxNumber != Regex!char.init)
+                    numberMatch = matchFirst(strText[pos..$], this.rxNumber);
+            } catch (Exception e) {
+                // Skip if regex is invalid
+            }
+            if (!numberMatch.empty) {
+                tokens ~= Token(pos, cast(int)numberMatch.hit.length, "number", lineIndex, numberMatch.hit);
+                pos += cast(int)numberMatch.hit.length;
+                foundMatch = true;
+                continue;
+            }
+            
+            // Try to match a keyword
+            auto keywordMatch = Captures!(string).init;
+            try {
+                if (this.rxKeyword != Regex!char.init)
+                    keywordMatch = matchFirst(strText[pos..$], this.rxKeyword);
+            } catch (Exception e) {
+                // Skip if regex is invalid
+            }
+            if (!keywordMatch.empty) {
+                tokens ~= Token(pos, cast(int)keywordMatch.hit.length, "keyword", lineIndex, keywordMatch.hit);
+                pos += cast(int)keywordMatch.hit.length;
+                foundMatch = true;
+                continue;
+            }
+            
+            // Try to match an identifier
+            auto identifierMatch = Captures!(string).init;
+            try {
+                if (this.rxIdentifier != Regex!char.init)
+                    identifierMatch = matchFirst(strText[pos..$], this.rxIdentifier);
+            } catch (Exception e) {
+                // Skip if regex is invalid
+            }
+            if (!identifierMatch.empty) {
+                tokens ~= Token(pos, cast(int)identifierMatch.hit.length, "identifier", lineIndex, identifierMatch.hit);
+                pos += cast(int)identifierMatch.hit.length;
+                foundMatch = true;
+                continue;
+            }
+            
+            // Try to match an operator
+            auto operatorMatch = Captures!(string).init;
+            try {
+                if (this.rxOperator != Regex!char.init)
+                    operatorMatch = matchFirst(strText[pos..$], this.rxOperator);
+            } catch (Exception e) {
+                // Skip if regex is invalid
+            }
+            if (!operatorMatch.empty) {
+                tokens ~= Token(pos, cast(int)operatorMatch.hit.length, "operator", lineIndex, operatorMatch.hit);
+                pos += cast(int)operatorMatch.hit.length;
+                foundMatch = true;
+                continue;
+            }
+            
+            // If no match found, treat as plain text
+            if (!foundMatch) {
+                tokens ~= Token(pos, 1, "text", lineIndex, [strText[pos]].idup);
+                pos++;
+            }
+        }
+        
+        return tokens;
+    }
+}
+
+/**
+ * CSSTokenizer - Tokenizer for CSS syntax
+ */
+class CSSTokenizer : Tokenizer {
+    /**
+     * Constructor
+     */
+    this() {
+        super();
+        
+        // CSS doesn't have many keywords, but we include some common ones
+        keywords = [
+            "import", "charset", "namespace", "media", "keyframes", "from", "to",
+            "important", "not", "only", "and", "or"
+        ];
+        
+        // Initialize regexes
+        initializeRegexes();
+    }
+    
+    /**
+     * Get name of tokenizer
+     */
+    override string getName() {
+        return "CSS";
+    }
+    
+    /**
+     * Get tokenizer description
+     */
+    override string getDescription() {
+        return "CSS syntax tokenizer";
+    }
+    
+    /**
+     * Get supported file extensions
+     */
+    override string[] getFileExtensions() {
+        return ["css", "scss", "less"];
+    }
+    
+    /**
+     * Get supported languages
+     */
+    override string[] getLanguages() {
+        return ["css", "scss", "less"];
+    }
+    
+    /**
+     * Initialize regular expressions
+     */
+    private void initializeRegexes() {
+        // Create keyword pattern
+        string keywordPattern = `\b(` ~ join(keywords, "|") ~ `)\b`;
+        this.rxKeyword = regex(keywordPattern);
+        
+        // String pattern
+        this.rxString = regex(`"[^"]*"|'[^']*'`);
+        
+        // Number pattern (includes units)
+        this.rxNumber = regex(`\d+|\d+\.\d+`);
+        
+        // Comment pattern
+        this.rxComment = regex(`/\*.*\*/`);
+        
+        // Identifier pattern (includes selectors)
+        this.rxIdentifier = regex(`[a-zA-Z_\-][a-zA-Z0-9_\-]*`);
+        
+        // Operator pattern
+        this.rxOperator = regex(`[+\-*/%=:]`);
+        rxOperator = regex(`[+>~:;,{}()#.=]`);
+    }
+}
+
+/**
+ * HTMLTokenizer - Tokenizer for HTML syntax
+ */
+class HTMLTokenizer : Tokenizer {
+    /**
+     * Constructor
+     */
+    this() {
+        super();
+        
+        // HTML doesn't have traditional keywords, but we use these common tags/attributes
+        keywords = [
+            "html", "head", "body", "div", "span", "a", "img", "script", "style",
+            "link", "meta", "title", "p", "h1", "h2", "h3", "h4", "h5", "h6",
+            "ul", "ol", "li", "table", "tr", "td", "th", "form", "input", "button",
+            "class", "id", "href", "src", "alt", "width", "height", "type"
+        ];
+        
+        // Initialize regexes
+        initializeRegexes();
+    }
+    
+    /**
+     * Get name of tokenizer
+     */
+    override string getName() {
+        return "HTML";
+    }
+    
+    /**
+     * Get tokenizer description
+     */
+    override string getDescription() {
+        return "HTML syntax tokenizer";
+    }
+    
+    /**
+     * Get supported file extensions
+     */
+    override string[] getFileExtensions() {
+        return ["html", "htm", "xhtml", "xml"];
+    }
+    
+    /**
+     * Get supported languages
+     */
+    override string[] getLanguages() {
+        return ["html", "xml"];
+    }
+    
+    /**
+     * Initialize regular expressions
+     */
+    private void initializeRegexes() {
+        // Create keyword pattern
+        string keywordPattern = `\b(` ~ join(keywords, "|") ~ `)\b`;
+        this.rxKeyword = regex(keywordPattern);
+        
+        // String pattern
+        this.rxString = regex(`"[^"]*"|'[^']*'`);
+        
+        // Number pattern
+        this.rxNumber = regex(`\d+|\d+\.\d+`);
+        
+        // Comment pattern
+        this.rxComment = regex(`<!--.*-->`);
+        
+        // Identifier pattern
+        this.rxIdentifier = regex(`[a-zA-Z_\-][a-zA-Z0-9_\-]*`);
+        
+        // Operator pattern
+        this.rxOperator = regex(`[<>=/!&]`);
+    }
+}
+
+/**
+ * TokenizerFactory - Factory for creating tokenizers
+ */
+class TokenizerFactory {
+    private static Tokenizer[] _tokenizers;
+    
+    // Static constructor to register tokenizers
+    static this() {
+        // Register built-in tokenizers
+        registerTokenizer(new JavaScriptTokenizer());
+        registerTokenizer(new CSSTokenizer());
+        registerTokenizer(new HTMLTokenizer());
+        // More tokenizers can be added here
+    }
+    
+    // Register a tokenizer
+    static void registerTokenizer(Tokenizer tokenizer) {
+        _tokenizers ~= tokenizer;
+    }
+    
+    // Get tokenizer by file extension
+    static Tokenizer getTokenizerForFile(string filename) {
+        foreach (tokenizer; _tokenizers) {
+            if (tokenizer.supportsFile(filename))
+                return tokenizer;
+        }
+        
+        // Return generic tokenizer if no specific one found
+        return new Tokenizer();
+    }
+    
+    // Get tokenizer by language name
+    static Tokenizer getTokenizerForLanguage(string language) {
+        foreach (tokenizer; _tokenizers) {
+            if (tokenizer.getLanguages().canFind(language.toLower()))
+                return tokenizer;
+        }
+        
+        // Return generic tokenizer if no specific one found
+        return new Tokenizer();
+    }
+    
+    // Get all registered tokenizers
+    static Tokenizer[] getAllTokenizers() {
+        return _tokenizers.dup;
+    }
+}

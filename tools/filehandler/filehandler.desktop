@@ -1,0 +1,33 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=text/plain;text/x-markdown;text/x-c;text/x-c++;text/x-java;text/x-python;text/x-javascript;text/x-typescript;text/html;text/xml;text/css;application/json;text/x-log;application/x-shellscript;text/x-diff;text/x-patch;
+Actions=HandleFile;ViewFile;EditFile;FileInfo;
+
+X-KDE-Submenu=Dnives File Handler
+X-KDE-Icon=text-editor
+X-KDE-Priority=TopLevel
+
+[Desktop Action HandleFile]
+Name=Handle with Dnives (Auto)
+Name[en]=Handle with Dnives (Auto)
+Icon=text-editor
+Exec=dnives %f
+
+[Desktop Action ViewFile]
+Name=View File Content
+Name[en]=View File Content
+Icon=text-x-generic
+Exec=dnives --action=view %f
+
+[Desktop Action EditFile]
+Name=Edit File
+Name[en]=Edit File
+Icon=text-editor
+Exec=dnives --action=edit %f
+
+[Desktop Action FileInfo]
+Name=Show File Information
+Name[en]=Show File Information
+Icon=dialog-information
+Exec=dnives --action=info %f

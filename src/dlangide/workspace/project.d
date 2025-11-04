@@ -16,152 +16,213 @@ import std.ascii : isAlphaNum;
 string[] includePath;
 
 /// return true if filename matches rules for workspace file names
-bool isProjectFile(in string filename) pure nothrow {
-    return filename.baseName.equal("dub.json") || filename.baseName.equal("DUB.JSON") || filename.baseName.equal("package.json") ||
+bool isProjectFile(in string filename) pure nothrow
+{
+    return filename.baseName.equal("dub.json") || filename.baseName.equal("DUB.JSON") || filename.baseName.equal(
+        "package.json") ||
         filename.baseName.equal("dub.sdl") || filename.baseName.equal("DUB.SDL");
 }
 
-string toForwardSlashSeparator(in string filename) pure nothrow {
+string toForwardSlashSeparator(in string filename) pure nothrow
+{
     char[] res;
-    foreach(ch; filename) {
+    foreach (ch; filename)
+    {
         if (ch == '\\')
             res ~= '/';
         else
             res ~= ch;
     }
-    return cast(string)res;
+    return cast(string) res;
 }
 
 /// project item
-class ProjectItem {
+class ProjectItem
+{
     protected Project _project;
     protected ProjectItem _parent;
     protected string _filename;
     protected dstring _name;
 
-    this(string filename) {
+    this(string filename)
+    {
         Log.d("ProjectItem constructor - input: ", filename);
         _filename = buildNormalizedPath(filename);
         Log.d("ProjectItem constructor - after buildNormalizedPath: ", _filename);
         _name = toUTF32(baseName(_filename));
     }
 
-    this() {
+    this()
+    {
     }
 
-    @property ProjectItem parent() { return _parent; }
+    @property ProjectItem parent()
+    {
+        return _parent;
+    }
 
-    @property Project project() { return _project; }
+    @property Project project()
+    {
+        return _project;
+    }
 
-    @property void project(Project p) { _project = p; }
+    @property void project(Project p)
+    {
+        _project = p;
+    }
 
-    @property string filename() { return _filename; }
+    @property string filename()
+    {
+        return _filename;
+    }
 
-    @property string directory() {
+    @property string directory()
+    {
         import std.path : dirName;
+
         return _filename.dirName;
     }
 
-    @property dstring name() { return _name; }
+    @property dstring name()
+    {
+        return _name;
+    }
 
-    @property string name8() {
+    @property string name8()
+    {
         return _name.toUTF8;
     }
 
     /// returns true if item is folder
-    @property const bool isFolder() { return false; }
-    /// returns child object count
-    @property int childCount() { return 0; }
-    /// returns child item by index
-    ProjectItem child(int index) { return null; }
-
-    void refresh() {
+    @property const bool isFolder()
+    {
+        return false;
     }
-
-    ProjectSourceFile findSourceFile(string projectFileName, string fullFileName) {
-        if (fullFileName.equal(_filename))
-            return cast(ProjectSourceFile)this;
-        if (project && projectFileName.equal(project.absoluteToRelativePath(_filename)))
-            return cast(ProjectSourceFile)this;
+    /// returns child object count
+    @property int childCount()
+    {
+        return 0;
+    }
+    /// returns child item by index
+    ProjectItem child(int index)
+    {
         return null;
     }
 
-    @property bool isDSourceFile() {
-        if (isFolder)
-            return false;
-        return filename.endsWith(".d") || filename.endsWith(".dd") || filename.endsWith(".dd")  || filename.endsWith(".di") || filename.endsWith(".dh") || filename.endsWith(".ddoc");
+    void refresh()
+    {
     }
 
-    @property bool isJsonFile() {
+    ProjectSourceFile findSourceFile(string projectFileName, string fullFileName)
+    {
+        if (fullFileName.equal(_filename))
+            return cast(ProjectSourceFile) this;
+        if (project && projectFileName.equal(project.absoluteToRelativePath(_filename)))
+            return cast(ProjectSourceFile) this;
+        return null;
+    }
+
+    @property bool isDSourceFile()
+    {
+        if (isFolder)
+            return false;
+        return filename.endsWith(".d") || filename.endsWith(".dd") || filename.endsWith(".dd") || filename.endsWith(
+            ".di") || filename.endsWith(".dh") || filename.endsWith(".ddoc");
+    }
+
+    @property bool isJsonFile()
+    {
         if (isFolder)
             return false;
         return filename.endsWith(".json") || filename.endsWith(".JSON");
     }
 
-    @property bool isDMLFile() {
+    @property bool isDMLFile()
+    {
         if (isFolder)
             return false;
         return filename.endsWith(".dml") || filename.endsWith(".DML");
     }
 
-    @property bool isXMLFile() {
+    @property bool isXMLFile()
+    {
         if (isFolder)
             return false;
         return filename.endsWith(".xml") || filename.endsWith(".XML");
     }
 }
 
-// Debug flag to trace folder path operations
+class ProjectFolder : ProjectItem
+{
+    // Debug flag to trace folder path operations
     private bool _debugPathOperations = true;
     protected ObjectList!ProjectItem _children;
 
-    this(string filename) {
+    this(string filename)
+    {
         super(filename);
     }
 
-    @property override const bool isFolder() {
+    @property override const bool isFolder()
+    {
         return true;
     }
-    @property override int childCount() {
+
+    @property override int childCount()
+    {
         return _children.count;
     }
     /// returns child item by index
-    override ProjectItem child(int index) {
+    override ProjectItem child(int index)
+    {
         return _children[index];
     }
-    void addChild(ProjectItem item) {
+
+    void addChild(ProjectItem item)
+    {
         _children.add(item);
         item._parent = this;
         item._project = _project;
     }
-    ProjectItem childByPathName(string path) {
-        for (int i = 0; i < _children.count; i++) {
+
+    ProjectItem childByPathName(string path)
+    {
+        for (int i = 0; i < _children.count; i++)
+        {
             if (_children[i].filename.equal(path))
                 return _children[i];
         }
         return null;
     }
-    ProjectItem childByName(dstring s) {
-        for (int i = 0; i < _children.count; i++) {
+
+    ProjectItem childByName(dstring s)
+    {
+        for (int i = 0; i < _children.count; i++)
+        {
             if (_children[i].name.equal(s))
                 return _children[i];
         }
         return null;
     }
 
-    override ProjectSourceFile findSourceFile(string projectFileName, string fullFileName) {
-        for (int i = 0; i < _children.count; i++) {
+    override ProjectSourceFile findSourceFile(string projectFileName, string fullFileName)
+    {
+        for (int i = 0; i < _children.count; i++)
+        {
             if (ProjectSourceFile res = _children[i].findSourceFile(projectFileName, fullFileName))
                 return res;
         }
         return null;
     }
 
-    bool loadDir(string path) {
+    bool loadDir(string path)
+    {
         string src = relativeToAbsolutePath(path);
-        if (exists(src) && isDir(src)) {
-            ProjectFolder existing = cast(ProjectFolder)childByPathName(src);
-            if (existing) {
+        if (exists(src) && isDir(src))
+        {
+            ProjectFolder existing = cast(ProjectFolder) childByPathName(src);
+            if (existing)
+            {
                 if (existing.isFolder)
                     existing.loadItems();
                 return true;
@@ -175,9 +236,11 @@ class ProjectItem {
         return false;
     }
 
-    bool loadFile(string path) {
+    bool loadFile(string path)
+    {
         string src = relativeToAbsolutePath(path);
-        if (exists(src) && isFile(src)) {
+        if (exists(src) && isFile(src))
+        {
             ProjectItem existing = childByPathName(src);
             if (existing)
                 return true;
@@ -188,10 +251,10 @@ class ProjectItem {
         }
         return false;
     }
-    
+
     // Default excluded directories
     private static immutable string[] EXCLUDED_DIRS = [
-        "node_modules", ".git", ".svn", ".hg", ".vs", 
+        "node_modules", ".git", ".svn", ".hg", ".vs",
         ".idea", ".vscode", "bin", "obj", "dist",
         "build", "target", "out", "output", "logs",
         ".venv", "__pycache__", "venv", "env", ".env",
@@ -200,65 +263,83 @@ class ProjectItem {
         ".pytest_cache", "__pycache__", ".mypy_cache", ".hypothesis",
         "bower_components", ".sass-cache", "coverage", "node_modules.nosync"
     ];
-    
+
     // Check if a directory should be excluded from indexing
-    private bool shouldExcludeDir(string dirName) {
+    private bool shouldExcludeDir(string dirName)
+    {
         import std.algorithm : canFind;
+
         // Exclude all directories outside of our exact selection
         if (dirName.startsWith(".."))
             return true;
         return EXCLUDED_DIRS.canFind(dirName);
     }
-    
-    void loadItems() {
+
+    void loadItems()
+    {
         bool[string] loaded;
         string path = _filename;
         Log.i("PROJECT: Loading items from path: ", _filename);
         if (exists(path) && isFile(path))
             path = dirName(path);
-        
+
         // Make sure we have an absolute path but DON'T normalize it further
         import std.path : isAbsolute, absolutePath;
+
         if (!isAbsolute(path))
             path = absolutePath(path);
-        
+
         // Don't update the _filename with any modified path
-        // _filename = path; 
-        
+        // _filename = path;
+
         Log.i("PROJECT: Scanning exact directory path: ", path);
-        try {
+        try
+        {
             // Check if directory exists and is accessible
-            if (!exists(path)) {
+            if (!exists(path))
+            {
                 Log.e("ERROR: Directory does not exist: ", path);
                 return;
             }
-            
-            if (!isDir(path)) {
+
+            if (!isDir(path))
+            {
                 Log.e("ERROR: Path is not a directory: ", path);
                 return;
             }
-            
-            foreach(e; dirEntries(path, SpanMode.shallow)) {
+
+            foreach (e; dirEntries(path, SpanMode.shallow))
+            {
                 string fn = baseName(e.name);
-                if (e.isDir) {
-                    if (!shouldExcludeDir(fn)) {
+                if (e.isDir)
+                {
+                    if (!shouldExcludeDir(fn))
+                    {
                         loadDir(fn);
                         loaded[fn] = true;
-                    } else {
+                    }
+                    else
+                    {
                         Log.v("Skipping excluded directory: ", fn);
                     }
-                } else if (e.isFile) {
+                }
+                else if (e.isFile)
+                {
                     loadFile(fn);
                     loaded[fn] = true;
                 }
             }
-        } catch (Exception e) {
+        }
+        catch (Exception e)
+        {
             Log.e("Error scanning directory ", path, ": ", e.msg);
             // Continue with partial results - don't crash
         }
         // removing non-reloaded items
-        for (int i = _children.count - 1; i >= 0; i--) {
-            if (!(toUTF8(_children[i].name) in loaded)) {
+        for (int i = _children.count - 1; i >= 0; i--)
+        {
+            if (!(toUTF8(_children[i].name) in loaded))
+            {
                 _children.remove(i);
             }
         }
@@ -266,16 +347,21 @@ class ProjectItem {
     }
 
     /// predicate for sorting project items
-    static bool compareProjectItemsLess(ProjectItem item1, ProjectItem item2) {
-        return ((item1.isFolder && !item2.isFolder) || ((item1.isFolder == item2.isFolder) && (item1.name < item2.name)));
+    static bool compareProjectItemsLess(ProjectItem item1, ProjectItem item2)
+    {
+        return ((item1.isFolder && !item2.isFolder) || ((item1.isFolder == item2.isFolder) && (
+                item1.name < item2.name)));
     }
 
-    void sortItems() {
+    void sortItems()
+    {
         import std.algorithm.sorting : sort;
+
         sort!compareProjectItemsLess(_children.asArray);
     }
 
-    string relativeToAbsolutePath(string path) {
+    string relativeToAbsolutePath(string path)
+    {
         if (isAbsolute(path))
             return path;
         string fn = _filename;
@@ -284,89 +370,121 @@ class ProjectItem {
         return buildNormalizedPath(fn, path);
     }
 
-    override void refresh() {
+    override void refresh()
+    {
         loadItems();
     }
 }
 
-
 /// Project source file
-class ProjectSourceFile : ProjectItem {
-    this(string filename) {
+class ProjectSourceFile : ProjectItem
+{
+    this(string filename)
+    {
         super(filename);
     }
     /// file path relative to project directory
-    @property string projectFilePath() {
+    @property string projectFilePath()
+    {
         return project.absoluteToRelativePath(filename);
     }
 
-    void setFilename(string filename) {
+    void setFilename(string filename)
+    {
         _filename = buildNormalizedPath(filename);
         _name = toUTF32(baseName(_filename));
     }
 }
 
-class WorkspaceItem {
+class WorkspaceItem
+{
     protected string _filename;
     protected string _dir;
     protected dstring _name;
     protected dstring _originalName;
     protected dstring _description;
 
-    this(string fname = null) {
+    this(string fname = null)
+    {
         filename = fname;
         Log.d("WorkspaceItem constructor - input fname: ", fname);
         Log.d("WorkspaceItem constructor - _filename after setter: ", _filename);
     }
 
     /// file name of workspace item
-    @property string filename() { return _filename; }
+    @property string filename()
+    {
+        return _filename;
+    }
 
     /// workspace item directory
-    @property string dir() { return _dir; }
+    @property string dir()
+    {
+        return _dir;
+    }
 
     /// file name of workspace item
-    @property void filename(string fname) {
-        if (fname.length > 0) {
+    @property void filename(string fname)
+    {
+        if (fname.length > 0)
+        {
             Log.d("WorkspaceItem.filename setter - input: ", fname);
             _filename = buildNormalizedPath(fname);
             Log.d("WorkspaceItem.filename setter - after buildNormalizedPath: ", _filename);
             _dir = dirName(filename);
             Log.d("WorkspaceItem.filename setter - _dir: ", _dir);
-        } else {
+        }
+        else
+        {
             _filename = null;
             _dir = null;
         }
     }
 
     /// name
-    @property dstring name() { return _name; }
+    @property dstring name()
+    {
+        return _name;
+    }
 
-    @property string name8() {
+    @property string name8()
+    {
         return _name.toUTF8;
     }
 
     /// name
-    @property void name(dstring s) {  _name = s; }
+    @property void name(dstring s)
+    {
+        _name = s;
+    }
 
     /// description
-    @property dstring description() { return _description; }
+    @property dstring description()
+    {
+        return _description;
+    }
     /// description
-    @property void description(dstring s) { _description = s; }
+    @property void description(dstring s)
+    {
+        _description = s;
+    }
 
     /// load
-    bool load(string fname) {
+    bool load(string fname)
+    {
         // override it
         return false;
     }
 
-    bool save(string fname = null) {
+    bool save(string fname = null)
+    {
         return false;
     }
 }
 
 /// Stores info about project configuration
-struct ProjectConfiguration {
+struct ProjectConfiguration
+{
     /// name used to build the project
     string name;
     /// type, for libraries one can run tests, for apps - execute them
@@ -378,7 +496,8 @@ struct ProjectConfiguration {
     immutable static ProjectConfiguration DEFAULT = ProjectConfiguration(DEFAULT_NAME, Type.Default);
 
     /// Type of configuration
-    enum Type {
+    enum Type
+    {
         Default,
         Executable,
         Library
@@ -386,13 +505,18 @@ struct ProjectConfiguration {
 
     private static Type parseType(string s)
     {
-        switch(s)
+        switch (s)
         {
-            case "executable": return Type.Executable;
-            case "library": return Type.Library;
-            case "dynamicLibrary": return Type.Library;
-            case "staticLibrary": return Type.Library;
-            default: return Type.Default;
+        case "executable":
+            return Type.Executable;
+        case "library":
+            return Type.Library;
+        case "dynamicLibrary":
+            return Type.Library;
+        case "staticLibrary":
+            return Type.Library;
+        default:
+            return Type.Default;
         }
     }
 
@@ -401,17 +525,21 @@ struct ProjectConfiguration {
     {
         ProjectConfiguration[] res;
         Setting configs = s.objectByPath("configurations");
-        if(configs is null || configs.type != SettingType.ARRAY) {
+        if (configs is null || configs.type != SettingType.ARRAY)
+        {
             res ~= DEFAULT;
             return res;
         }
 
-        foreach(conf; configs) {
-            if(!conf.isObject) continue;
+        foreach (conf; configs)
+        {
+            if (!conf.isObject)
+                continue;
             Type t = Type.Default;
-            if(auto typeName = conf.getString("targetType"))
+            if (auto typeName = conf.getString("targetType"))
                 t = parseType(typeName);
-            if (string confName = conf.getString("name")) {
+            if (string confName = conf.getString("name"))
+            {
                 res ~= ProjectConfiguration(confName, t);
             }
         }
@@ -420,8 +548,10 @@ struct ProjectConfiguration {
 }
 
 /// DLANGIDE D project
-class Project : WorkspaceItem {
+class Project : WorkspaceItem
+{
     import dlangide.workspace.idesettings : IDESettings;
+
     protected Workspace _workspace;
     protected bool _opened;
     protected ProjectFolder _items;
@@ -438,34 +568,42 @@ class Project : WorkspaceItem {
     protected ProjectConfiguration[] _configurations;
     protected ProjectConfiguration _projectConfiguration = ProjectConfiguration.DEFAULT;
 
-    @property int projectConfigurationIndex() {
+    @property int projectConfigurationIndex()
+    {
         ProjectConfiguration config = projectConfiguration();
-        foreach(i, value; _configurations) {
+        foreach (i, value; _configurations)
+        {
             if (value.name == config.name)
-                return cast(int)i;
+                return cast(int) i;
         }
         return 0;
     }
 
-    @property ProjectConfiguration projectConfiguration() {
+    @property ProjectConfiguration projectConfiguration()
+    {
         if (_configurations.length == 0)
             return ProjectConfiguration.DEFAULT;
         string configName = settings.projectConfiguration;
-        foreach(config; _configurations) {
+        foreach (config; _configurations)
+        {
             if (configName == config.name)
                 return config;
         }
         return _configurations[0];
     }
 
-    @property void projectConfiguration(ProjectConfiguration config) {
+    @property void projectConfiguration(ProjectConfiguration config)
+    {
         settings.projectConfiguration = config.name;
         settings.save();
     }
 
-    @property void projectConfiguration(string configName) {
-        foreach(name, config; _configurations) {
-            if (configName == config.name) {
+    @property void projectConfiguration(string configName)
+    {
+        foreach (name, config; _configurations)
+        {
+            if (configName == config.name)
+            {
                 settings.projectConfiguration = config.name;
                 settings.save();
                 return;
@@ -473,52 +611,64 @@ class Project : WorkspaceItem {
         }
     }
 
-    this(Workspace ws, string fname = null, string dependencyVersion = null) {
+    this(Workspace ws, string fname = null, string dependencyVersion = null)
+    {
         super(fname);
         _workspace = ws;
         Log.d("Project constructor - filename: ", fname);
         Log.d("Project _filename after super: ", _filename);
-        
+
         // No need to initialize excluded directories anymore
 
-        if (_workspace) {
-    		foreach(obj; _workspace.includePath.array)
-    			includePath ~= obj.str;
+        if (_workspace)
+        {
+            foreach (obj; _workspace.includePath.array)
+                includePath ~= obj.str;
         }
 
         // Handle both file paths and directory paths
-        if (fname && fname.exists && fname.isDir) {
+        if (fname && fname.exists && fname.isDir)
+        {
             _items = new ProjectFolder(fname);
             _projectFile = new SettingsFile();
-        } else {
+        }
+        else
+        {
             _items = new ProjectFolder(fname.dirName);
             _projectFile = new SettingsFile(fname);
         }
-        
+
         _dependencyVersion = dependencyVersion;
         _isDependency = _dependencyVersion.length > 0;
     }
 
-    void setBaseProject(Project p) {
-        if (p) {
+    void setBaseProject(Project p)
+    {
+        if (p)
+        {
             _isSubproject = true;
             _isDependency = p._isDependency;
             _baseProjectName = p._originalName;
             _dependencyVersion = p._dependencyVersion;
-        } else {
+        }
+        else
+        {
             _isSubproject = false;
         }
     }
 
-    void setSubprojectJson(Setting s) {
+    void setSubprojectJson(Setting s)
+    {
         if (!_projectFile)
             _projectFile = new SettingsFile();
         _isEmbeddedSubproject = true;
         _projectFile.replaceSetting(s.clone);
     }
 
-    @property ProjectSettings settings() {
-        if (!_settingsFile) {
+    @property ProjectSettings settings()
+    {
+        if (!_settingsFile)
+        {
             _settingsFile = new ProjectSettings(settingsFileName);
             _settingsFile.updateDefaults();
             _settingsFile.load();
@@ -527,12 +677,20 @@ class Project : WorkspaceItem {
         return _settingsFile;
     }
 
-    @property string settingsFileName() {
+    @property string settingsFileName()
+    {
         return buildNormalizedPath(dir, toUTF8(name) ~ ".settings");
     }
 
-    @property bool isDependency() { return _isDependency; }
-    @property string dependencyVersion() { return _dependencyVersion; }
+    @property bool isDependency()
+    {
+        return _isDependency;
+    }
+
+    @property string dependencyVersion()
+    {
+        return _dependencyVersion;
+    }
 
     /// returns project configurations
     @property const(ProjectConfiguration[]) configurations() const
@@ -545,40 +703,51 @@ class Project : WorkspaceItem {
     {
         dstring[] res;
         res.assumeSafeAppend;
-        foreach(conf; _configurations)
+        foreach (conf; _configurations)
             res ~= conf.name.toUTF32;
         return res;
     }
 
     /// direct access to project file (json)
-    @property SettingsFile content() { return _projectFile; }
+    @property SettingsFile content()
+    {
+        return _projectFile;
+    }
 
     /// name
-    override @property dstring name() {
+    override @property dstring name()
+    {
         return super.name();
     }
 
     /// name
-    override @property void name(dstring s) {
+    override @property void name(dstring s)
+    {
         super.name(s);
         _projectFile.setting.setString("name", toUTF8(s));
     }
 
     /// name
-    override @property dstring description() {
+    override @property dstring description()
+    {
         return super.description();
     }
 
     /// name
-    override @property void description(dstring s) {
+    override @property void description(dstring s)
+    {
         super.description(s);
         _projectFile.setting.setString("description", toUTF8(s));
     }
 
     /// returns project's own source paths
-    @property string[] sourcePaths() { return _sourcePaths; }
+    @property string[] sourcePaths()
+    {
+        return _sourcePaths;
+    }
     /// returns project's current toolchain import paths
-    string[] builderSourcePaths(IDESettings ideSettings) {
+    string[] builderSourcePaths(IDESettings ideSettings)
+    {
         string compilerName = settings.getToolchain(ideSettings);
         if (!compilerName)
             compilerName = "default";
@@ -586,70 +755,97 @@ class Project : WorkspaceItem {
     }
 
     /// returns first source folder for project or null if not found
-    ProjectFolder firstSourceFolder() {
-        for(int i = 0; i < _items.childCount; i++) {
+    ProjectFolder firstSourceFolder()
+    {
+        for (int i = 0; i < _items.childCount; i++)
+        {
             if (_items.child(i).isFolder)
-                return cast(ProjectFolder)_items.child(i);
+                return cast(ProjectFolder) _items.child(i);
         }
         return null;
     }
 
-    ProjectSourceFile findSourceFile(string projectFileName, string fullFileName) {
+    ProjectSourceFile findSourceFile(string projectFileName, string fullFileName)
+    {
         return _items ? _items.findSourceFile(projectFileName, fullFileName) : null;
     }
 
-    private static void addUnique(ref string[] dst, string[] items) {
-        foreach(item; items) {
+    private static void addUnique(ref string[] dst, string[] items)
+    {
+        foreach (item; items)
+        {
             if (!canFind(dst, item))
                 dst ~= item;
         }
     }
-    @property string[] importPaths(IDESettings ideSettings) {
+
+    @property string[] importPaths(IDESettings ideSettings)
+    {
         string[] res;
         addUnique(res, sourcePaths);
         addUnique(res, builderSourcePaths(ideSettings));
-        foreach(dep; _dependencies) {
+        foreach (dep; _dependencies)
+        {
             addUnique(res, dep.sourcePaths);
         }
         return res;
     }
 
-    string relativeToAbsolutePath(string path) {
+    string relativeToAbsolutePath(string path)
+    {
         if (isAbsolute(path))
             return path;
         return buildNormalizedPath(_dir, path);
     }
 
-    string absoluteToRelativePath(string path) {
+    string absoluteToRelativePath(string path)
+    {
         if (!isAbsolute(path))
             return path;
         return relativePath(path, _dir);
     }
 
-    @property ProjectSourceFile mainSourceFile() { return _mainSourceFile; }
-    @property ProjectFolder items() { return _items; }
+    @property ProjectSourceFile mainSourceFile()
+    {
+        return _mainSourceFile;
+    }
 
-    @property Workspace workspace() { return _workspace; }
+    @property ProjectFolder items()
+    {
+        return _items;
+    }
 
-    @property void workspace(Workspace p) { _workspace = p; }
+    @property Workspace workspace()
+    {
+        return _workspace;
+    }
 
-    @property string defWorkspaceFile() {
+    @property void workspace(Workspace p)
+    {
+        _workspace = p;
+    }
+
+    @property string defWorkspaceFile()
+    {
         return buildNormalizedPath(_filename.dirName, toUTF8(name) ~ WORKSPACE_EXTENSION);
     }
 
-    @property bool isExecutable() {
+    @property bool isExecutable()
+    {
         // TODO: use targetType
         return true;
     }
 
     /// return executable file name, or null if it's library project or executable is not found
-    @property string executableFileName() {
+    @property string executableFileName()
+    {
         if (!isExecutable)
             return null;
         string exename = toUTF8(name);
         exename = _projectFile.setting.getString("targetName", exename);
         // TODO: use targetName
-        version (Windows) {
+        version (Windows)
+        {
             exename = exename ~ ".exe";
         }
         string targetPath = _projectFile.setting.getString("targetPath", null);
@@ -662,26 +858,31 @@ class Project : WorkspaceItem {
     }
 
     /// working directory for running and debugging project
-    @property string workingDirectory() {
+    @property string workingDirectory()
+    {
         // TODO: get from settings
         return _filename.dirName;
     }
 
     /// commandline parameters for running and debugging project
-    @property string runArgs() {
+    @property string runArgs()
+    {
         // TODO: get from settings
         return null;
     }
 
-    @property bool runInExternalConsole() {
+    @property bool runInExternalConsole()
+    {
         // TODO
         return settings.runInExternalConsole;
     }
 
-    private ProjectFolder findItems(string[] srcPaths) {
+    private ProjectFolder findItems(string[] srcPaths)
+    {
         auto folder = new ProjectFolder(_filename.dirName);
         folder.project = this;
-        foreach(customPath; srcPaths) {
+        foreach (customPath; srcPaths)
+        {
             string path = relativeToAbsolutePath(customPath);
             if (folder.loadDir(path))
                 _sourcePaths ~= path;
@@ -689,17 +890,21 @@ class Project : WorkspaceItem {
         return folder;
     }
 
-    void refresh() {
-        for (int i = _items._children.count - 1; i >= 0; i--) {
+    void refresh()
+    {
+        for (int i = _items._children.count - 1; i >= 0; i--)
+        {
             if (_items._children[i].isFolder)
                 _items._children[i].refresh();
         }
     }
 
-    void findMainSourceFile() {
+    void findMainSourceFile()
+    {
         string n = toUTF8(name);
         string[] mainnames = ["app.d", "main.d", n ~ ".d"];
-        foreach(sname; mainnames) {
+        foreach (sname; mainnames)
+        {
             _mainSourceFile = findSourceFileItem(buildNormalizedPath(_dir, "src", sname));
             if (_mainSourceFile)
                 break;
@@ -710,18 +915,23 @@ class Project : WorkspaceItem {
     }
 
     /// tries to find source file in project, returns found project source file item, or null if not found
-    ProjectSourceFile findSourceFileItem(ProjectItem dir, string filename, bool fullFileName=true) {
-        foreach(i; 0 .. dir.childCount) {
+    ProjectSourceFile findSourceFileItem(ProjectItem dir, string filename, bool fullFileName = true)
+    {
+        foreach (i; 0 .. dir.childCount)
+        {
             ProjectItem item = dir.child(i);
-            if (item.isFolder) {
+            if (item.isFolder)
+            {
                 ProjectSourceFile res = findSourceFileItem(item, filename, fullFileName);
                 if (res)
                     return res;
-            } else {
-                auto res = cast(ProjectSourceFile)item;
-                if(res)
+            }
+            else
+            {
+                auto res = cast(ProjectSourceFile) item;
+                if (res)
                 {
-                    if(fullFileName && res.filename.equal(filename))
+                    if (fullFileName && res.filename.equal(filename))
                         return res;
                     else if (!fullFileName && res.filename.endsWith(filename))
                         return res;
@@ -731,46 +941,54 @@ class Project : WorkspaceItem {
         return null;
     }
 
-    ProjectSourceFile findSourceFileItem(string filename, bool fullFileName=true) {
+    ProjectSourceFile findSourceFileItem(string filename, bool fullFileName = true)
+    {
         return findSourceFileItem(_items, filename, fullFileName);
     }
 
     protected Project[] _subPackages;
 
     /// add item to string array ignoring duplicates
-    protected static void addUnique(ref string[] list, string item) {
-        foreach(s; list)
+    protected static void addUnique(ref string[] list, string item)
+    {
+        foreach (s; list)
             if (s == item)
                 return;
         list ~= item;
     }
 
     /// add item to string array ignoring duplicates
-    protected void addRelativePathIfExists(ref string[] list, string item) {
+    protected void addRelativePathIfExists(ref string[] list, string item)
+    {
         item = relativeToAbsolutePath(item);
         if (item.exists && item.isDir)
             addUnique(list, item);
     }
 
     /// find source paths for project
-    protected string[] findSourcePaths() {
+    protected string[] findSourcePaths()
+    {
         string[] res;
         res.assumeSafeAppend;
         string[] srcPaths = _projectFile.setting.getStringArray("sourcePaths");
-        foreach(s; srcPaths)
+        foreach (s; srcPaths)
             addRelativePathIfExists(res, s);
         Setting configs = _projectFile.setting.objectByPath("configurations");
-        if (configs) {
-            for (int i = 0; i < configs.length; i++) {
+        if (configs)
+        {
+            for (int i = 0; i < configs.length; i++)
+            {
                 Setting s = configs[i];
-                if (s) {
+                if (s)
+                {
                     string[] paths = s.getStringArray("sourcePaths");
-                    foreach(path; paths)
+                    foreach (path; paths)
                         addRelativePathIfExists(res, path);
                 }
             }
         }
-        if (!res.length) {
+        if (!res.length)
+        {
             addRelativePathIfExists(res, "src");
             addRelativePathIfExists(res, "source");
         }
@@ -778,15 +996,20 @@ class Project : WorkspaceItem {
         return res;
     }
 
-    void processSubpackages() {
+    void processSubpackages()
+    {
         import dlangui.core.files;
+
         _subPackages.length = 0;
         Setting subPackages = _projectFile.setting.settingByPath("subPackages", SettingType.ARRAY, false);
-        if (subPackages) {
+        if (subPackages)
+        {
             string p = _projectFile.filename.dirName;
-            for(int i = 0; i < subPackages.length; i++) {
+            for (int i = 0; i < subPackages.length; i++)
+            {
                 Setting sp = subPackages[i];
-                if (sp.isString) {
+                if (sp.isString)
+                {
                     // string
                     string path = convertPathDelimiters(sp.str);
                     string relative = relativePath(path, p);
@@ -796,29 +1019,38 @@ class Project : WorkspaceItem {
                     //Log.d("Subproject file: ", fn);
                     Project prj = new Project(_workspace, fn);
                     prj.setBaseProject(this);
-                    if (prj.load()) {
+                    if (prj.load())
+                    {
                         Log.d("Loaded subpackage from file: ", fn);
                         _subPackages ~= prj;
                         if (_workspace)
                             _workspace.addDependencyProject(prj);
-                    } else {
+                    }
+                    else
+                    {
                         Log.w("Failed to load subpackage from file: ", fn);
                     }
-                } else if (sp.isObject) {
+                }
+                else if (sp.isObject)
+                {
                     // object - file inside base project dub.json
                     Log.d("Subpackage is JSON object");
                     string subname = sp.getString("name");
-                    if (subname) {
+                    if (subname)
+                    {
                         Project prj = new Project(_workspace, _filename ~ "@" ~ subname);
                         prj.setBaseProject(this);
                         prj.setSubprojectJson(sp);
                         bool res = prj.processLoadedProject();
-                        if (res) {
+                        if (res)
+                        {
                             Log.d("Added embedded subpackage ", subname);
                             _subPackages ~= prj;
                             if (_workspace)
                                 _workspace.addDependencyProject(prj);
-                        } else {
+                        }
+                        else
+                        {
                             Log.w("Error while processing embedded subpackage");
                         }
                     }
@@ -828,18 +1060,23 @@ class Project : WorkspaceItem {
     }
 
     /// parse data from _projectFile after loading
-    bool processLoadedProject() {
+    bool processLoadedProject()
+    {
         //
         _mainSourceFile = null;
-        try {
+        try
+        {
             _name = toUTF32(_projectFile.setting.getString("name"));
             _originalName = _name;
-            if (_baseProjectName) {
+            if (_baseProjectName)
+            {
                 _name = _baseProjectName ~ ":" ~ _name;
             }
-            if (_isDependency) {
+            if (_isDependency)
+            {
                 _name ~= "-"d;
-                _name ~= toUTF32(_dependencyVersion.startsWith("~") ? _dependencyVersion[1..$] : _dependencyVersion);
+                _name ~= toUTF32(_dependencyVersion.startsWith("~") ? _dependencyVersion[1 .. $]
+                        : _dependencyVersion);
             }
             _description = toUTF32(_projectFile.setting.getString("description"));
             Log.d("  project name: ", _name);
@@ -860,8 +1097,9 @@ class Project : WorkspaceItem {
             _configurations = ProjectConfiguration.load(_projectFile.setting);
             Log.i("Project configurations: ", _configurations);
 
-
-        } catch (Exception e) {
+        }
+        catch (Exception e)
+        {
             Log.e("Cannot read project file", e);
             return false;
         }
@@ -869,94 +1107,24 @@ class Project : WorkspaceItem {
         return true;
     }
 
-    Log.f("PROJECT: loadAsDirectory called with path: ", _filename);
-        
-        // Create a backup of the original path
-        string originalPath = _filename.dup;
-        Log.f("PROJECT: Original path: ", originalPath);
-        
-        // Verify directory exists
-        if (!_filename.exists) {
-            Log.f("PROJECT ERROR: Directory does not exist: ", _filename);
-            return false;
-        }
-        
-        Log.f("PROJECT ERROR: Path is not a directory: ", _filename);
-            return false;
-        }
-        
-        try {
-            Log.e("PROJECT: Loading directory as project: ", _filename);
-            
-            // Initialize basic project settings
-            _projectFile = new SettingsFile();
-            
-            // Ensure we have an absolute path but DON'T normalize it further
-            Log.f("PROJECT: Converting to absolute path");
-                _filename = absolutePath(_filename);
-                Log.f("PROJECT: Absolute path: ", _filename);
-            }
-            
-            // Remove trailing slash if present for consistency
-            if (_filename.endsWith("/") || _filename.endsWith("\\")) {
-                _filename = _filename[0..$-1];
-                Log.f("PROJECT: Removed trailing slash: ", _filename);
-            }
-            
-            Log.f("PROJECT: Using exact project path: ", _filename);
-            
-            // Use the basename for the project name
-            string projectName = _filename.baseName;
-            Log.f("PROJECT: Setting project name to: ", projectName);
-            _projectFile.setting.setString("name", projectName);
-            
-            // Set up source paths - just use the directory itself
-            _sourcePaths = ["."];
-            
-            // Use the default configuration
-            _configurations = [ProjectConfiguration.DEFAULT];
-            Log.f("PROJECT: Creating project folder with path: ", _filename);
-            _items = new ProjectFolder(_filename);
-            
-            if (_items is null) {
-                Log.f("PROJECT ERROR: Failed to create project folder");
-                return false;
-            }
-            
-            Log.f("PROJECT: Created project folder with exact path: ", _items.filename);
-            
-            // Load directory contents
-            Log.f("PROJECT: Loading directory contents");
-            _items.loadItems(); // This method doesn't return a value
-            
-            Log.f("PROJECT: Successfully loaded directory items for: ", _filename);
-            return true;
-        } catch (Exception e) {
-            Log.f("PROJECT ERROR: Exception while loading directory: ", e.msg);
-            return false;
-        }
-    }
-
-    override bool load(string fname = null) {
+    override bool load(string fname = null)
+    {
         if (!_projectFile)
             _projectFile = new SettingsFile();
         if (fname.length > 0)
             filename = fname;
-        
-        // Check if this is a directory without a project file
-        if (_filename.exists && _filename.isDir && !isProjectFile(_filename)) {
-            Log.f("PROJECT: Detected directory path, calling loadAsDirectory for: ", _filename);
-            
-        if (!_projectFile.load(_filename)) {
+
+        if (!_projectFile.load(_filename))
+        {
             Log.e("failed to load project from file ", _filename);
             return false;
         }
         Log.d("Reading project from file ", _filename);
         return processLoadedProject();
-
     }
 
-    override bool save(string fname = null) {
+    override bool save(string fname = null)
+    {
         if (_isEmbeddedSubproject)
             return false;
         if (fname !is null)
@@ -966,48 +1134,63 @@ class Project : WorkspaceItem {
     }
 
     protected Project[] _dependencies;
-    @property Project[] dependencies() { return _dependencies; }
+    @property Project[] dependencies()
+    {
+        return _dependencies;
+    }
 
-    Project findDependencyProject(string filename) {
-        foreach(dep; _dependencies) {
+    Project findDependencyProject(string filename)
+    {
+        foreach (dep; _dependencies)
+        {
             if (dep.filename.equal(filename))
                 return dep;
         }
         return null;
     }
 
-    bool loadSelections() {
+    bool loadSelections()
+    {
         Project[] newdeps;
         _dependencies.length = 0;
         auto finder = new DubPackageFinder;
-        scope(exit) destroy(finder);
+        scope (exit)
+            destroy(finder);
         SettingsFile selectionsFile = new SettingsFile(buildNormalizedPath(_dir, "dub.selections.json"));
-        if (!selectionsFile.load()) {
+        if (!selectionsFile.load())
+        {
             _dependencies = newdeps;
             return false;
         }
         Setting versions = selectionsFile.setting.objectByPath("versions");
-        if (!versions.isObject) {
+        if (!versions.isObject)
+        {
             _dependencies = newdeps;
             return false;
         }
         string[string] versionMap = versions.strMap;
-        foreach(packageName, packageVersion; versionMap) {
+        foreach (packageName, packageVersion; versionMap)
+        {
             string fn = finder.findPackage(packageName, packageVersion);
             Log.d("dependency ", packageName, " ", packageVersion, " : ", fn ? fn : "NOT FOUND");
-            if (fn) {
+            if (fn)
+            {
                 Project p = findDependencyProject(fn);
-                if (p) {
+                if (p)
+                {
                     Log.d("Found existing dependency project ", fn);
                     newdeps ~= p;
                     continue;
                 }
                 p = new Project(_workspace, fn, packageVersion);
-                if (p.load()) {
+                if (p.load())
+                {
                     newdeps ~= p;
                     if (_workspace)
                         _workspace.addDependencyProject(p);
-                } else {
+                }
+                else
+                {
                     Log.e("cannot load dependency package ", packageName, " ", packageVersion, " from file ", fn);
                     destroy(p);
                 }
@@ -1018,26 +1201,32 @@ class Project : WorkspaceItem {
     }
 }
 
-class DubPackageFinder {
+class DubPackageFinder
+{
     string systemDubPath;
     string userDubPath;
     string tempPath;
-    this() {
-        version(Windows){
+    this()
+    {
+        version (Windows)
+        {
             systemDubPath = buildNormalizedPath(environment.get("ProgramData"), "dub", "packages");
             userDubPath = buildNormalizedPath(environment.get("APPDATA"), "dub", "packages");
             tempPath = buildNormalizedPath(environment.get("TEMP"), "dub", "packages");
-        } else version(Posix){
+        }
+        else version (Posix)
+        {
             systemDubPath = "/var/lib/dub/packages";
             userDubPath = buildNormalizedPath(environment.get("HOME"), ".dub", "packages");
-            if(!userDubPath.isAbsolute)
+            if (!userDubPath.isAbsolute)
                 userDubPath = buildNormalizedPath(getcwd(), userDubPath);
             tempPath = "/tmp/packages";
         }
     }
 
     /// find package file (dub.json, package.json) in specified dir; returns absoulute path to found file or null if not found
-    static string findPackageFile(string pathName) {
+    static string findPackageFile(string pathName)
+    {
         string fn = buildNormalizedPath(pathName, "dub.json");
         if (fn.exists && fn.isFile)
             return fn;
@@ -1050,10 +1239,12 @@ class DubPackageFinder {
         return null;
     }
 
-    protected string findPackage(string packageDir, string packageName, string packageVersion) {
-        string fullName = packageVersion.startsWith("~") ? packageName ~ "-" ~ packageVersion[1..$] : packageName ~ "-" ~ packageVersion;
+    protected string findPackage(string packageDir, string packageName, string packageVersion)
+    {
+        string fullName = packageVersion.startsWith("~") ? packageName ~ "-" ~ packageVersion[1 .. $] : packageName ~ "-" ~ packageVersion;
         string pathName = absolutePath(buildNormalizedPath(packageDir, fullName));
-        if (pathName.exists && pathName.isDir) {
+        if (pathName.exists && pathName.isDir)
+        {
             string fn = findPackageFile(pathName);
             if (fn)
                 return fn;
@@ -1065,7 +1256,8 @@ class DubPackageFinder {
         return null;
     }
 
-    string findPackage(string packageName, string packageVersion) {
+    string findPackage(string packageName, string packageVersion)
+    {
         string res = null;
         res = findPackage(userDubPath, packageName, packageVersion);
         if (res)
@@ -1075,25 +1267,29 @@ class DubPackageFinder {
     }
 }
 
-bool isValidProjectName(in string s) pure {
+bool isValidProjectName(in string s) pure
+{
     if (s.empty)
         return false;
     return reduce!((a, b) => a && (b == '_' || b == '-' || isAlphaNum(b)))(true, s);
 }
 
-bool isValidModuleName(in string s) pure {
+bool isValidModuleName(in string s) pure
+{
     if (s.empty)
         return false;
     return reduce!((a, b) => a && (b == '_' || isAlphaNum(b)))(true, s);
 }
 
-bool isValidFileName(in string s) pure {
+bool isValidFileName(in string s) pure
+{
     if (s.empty)
         return false;
     return reduce!((a, b) => a && (b == '_' || b == '.' || b == '-' || isAlphaNum(b)))(true, s);
 }
 
-unittest {
+unittest
+{
     assert(!isValidProjectName(""));
     assert(isValidProjectName("project"));
     assert(isValidProjectName("cool_project"));
@@ -1117,7 +1313,8 @@ unittest {
     assert(!isValidFileName("<file>"));
 }
 
-class EditorBookmark {
+class EditorBookmark
+{
     string file;
     string fullFilePath;
     string projectFilePath;
@@ -1125,17 +1322,20 @@ class EditorBookmark {
     string projectName;
 }
 
-
-string[] splitByLines(string s) {
+string[] splitByLines(string s)
+{
     string[] res;
     int start = 0;
-    for(int i = 0; i <= s.length; i++) {
-        if (i == s.length) {
+    for (int i = 0; i <= s.length; i++)
+    {
+        if (i == s.length)
+        {
             if (start < i)
                 res ~= s[start .. i];
             break;
         }
-        if (s[i] == '\r' || s[i] == '\n') {
+        if (s[i] == '\r' || s[i] == '\n')
+        {
             if (start < i)
                 res ~= s[start .. i];
             start = i + 1;
@@ -1144,32 +1344,41 @@ string[] splitByLines(string s) {
     return res;
 }
 
-struct CompilerImportPathsCache {
+struct CompilerImportPathsCache
+{
 
-    private static class Entry {
+    private static class Entry
+    {
         string[] list;
     }
+
     private Entry[string] _cache;
 
-    string[] getImportPathsFor(string compiler) {
+    string[] getImportPathsFor(string compiler)
+    {
         import dlangui.core.files : findExecutablePath;
+
         if (!compiler.length)
             return [];
-        if (auto p = compiler in _cache) {
+        if (auto p = compiler in _cache)
+        {
             // found in cache
             return p.list;
         }
         Log.d("Searching for compiler path: ", compiler);
         import std.path : isAbsolute;
+
         string compilerPath = compiler;
-        if (compiler == "default") {
+        if (compiler == "default")
+        {
             // try to autodetect default compiler
             compilerPath = findExecutablePath("dmd");
             if (!compilerPath)
                 compilerPath = findExecutablePath("ldc");
             if (!compilerPath)
                 compilerPath = findExecutablePath("gdc");
-        } else if (compilerPath && !compilerPath.isAbsolute)
+        }
+        else if (compilerPath && !compilerPath.isAbsolute)
             compilerPath = findExecutablePath(compiler);
         string[] res;
         if (compilerPath)
@@ -1185,29 +1394,36 @@ struct CompilerImportPathsCache {
 
 __gshared CompilerImportPathsCache compilerImportPathsCache;
 
-string[] detectImportPathsForCompiler(string compiler) {
+string[] detectImportPathsForCompiler(string compiler)
+{
     string[] res;
     import std.process : pipeProcess, Redirect, wait;
     import std.string : startsWith, indexOf;
     import std.path : buildNormalizedPath;
     import std.file : write, remove;
     import dlangui.core.files;
-    try {
+
+    try
+    {
         string sourcefilename = appDataPath(".dlangide") ~ PATH_DELIMITER ~ "tmp_dummy_file_to_get_import_paths.d";
         write(sourcefilename, "import module_that_does_not_exist;\n");
-        auto pipes = pipeProcess([compiler, sourcefilename], Redirect.stdin | Redirect.stdout | Redirect.stderrToStdout, null, Config.suppressConsole);
+        auto pipes = pipeProcess([compiler, sourcefilename], Redirect.stdin | Redirect.stdout | Redirect
+                .stderrToStdout, null, Config.suppressConsole);
         char[4096] buffer;
         char[] s = pipes.stdout.rawRead(buffer);
         wait(pipes.pid);
         //auto ls = execute([compiler, sourcefilename]);
         remove(sourcefilename);
         //string s = ls.output;
-        string[] lines = splitByLines(cast(string)s);
+        string[] lines = splitByLines(cast(string) s);
         debug Log.d("compiler output:\n", s);
-        foreach(line; lines) {
-            if (line.startsWith("import path[")) {
+        foreach (line; lines)
+        {
+            if (line.startsWith("import path["))
+            {
                 auto p = line.indexOf("] = ");
-                if (p > 0) {
+                if (p > 0)
+                {
                     line = line[p + 4 .. $];
                     string path = line.buildNormalizedPath;
                     debug Log.d("import path found: `", path, "`");
@@ -1216,7 +1432,9 @@ string[] detectImportPathsForCompiler(string compiler) {
             }
         }
         return res;
-    } catch (Exception e) {
+    }
+    catch (Exception e)
+    {
         return null;
     }
 }

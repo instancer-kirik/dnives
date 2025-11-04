@@ -1,4 +1,4 @@
-module app;
+module dlangide_legacy;
 
 import dlangui;
 import std.stdio;
@@ -9,7 +9,7 @@ import dlangide.ui.frame;
 import dlangide.ui.commands;
 import dlangide.workspace.workspace;
 
-static if(__VERSION__ > 2100)
+static if (__VERSION__ > 2100)
 {
     import std.logger;
 }
@@ -21,10 +21,11 @@ else
 mixin APP_ENTRY_POINT;
 
 /// entry point for dlangui based application
-extern (C) int UIAppMain(string[] args) {
+extern (C) int UIAppMain(string[] args)
+{
     // Configure logging - reduce verbosity to absolute minimum
     import dlangui.core.logger : LogLevel;
-    
+
     // Set log level to Fatal (minimum) to prevent excessive logging
     Log.setLogLevel(LogLevel.Fatal);
     // Confirm log level change using fatal level to ensure visibility
@@ -38,30 +39,39 @@ extern (C) int UIAppMain(string[] args) {
     //        Log.d("trace.log is parsed ok in ", currentTimeMillis - start, " seconds");
     //    }
     //}
-    debug(TestParser) {
+    debug (TestParser)
+    {
         import ddc.lexer.parser;
+
         runParserTests();
     }
 
     // D Completion Daemon logging config
-    static if(__VERSION__ > 2100) {
-        debug {
+    static if (__VERSION__ > 2100)
+    {
+        debug
+        {
             // Use NullLogger for DCD to reduce verbosity
-            sharedLog = cast(shared)new NullLogger();
+            sharedLog = cast(shared) new NullLogger();
             // Uncomment the following line to enable DCD logging
             // sharedLog = cast(shared)new FileLogger("dcd.log");
-        } else {
-            sharedLog = cast(shared)new NullLogger();
+        }
+    else
+        {
+            sharedLog = cast(shared) new NullLogger();
         }
     }
     else
     {
-        debug {
+        debug
+        {
             // Use NullLogger for DCD to reduce verbosity
             sharedLog = new NullLogger();
             // Uncomment the following line to enable DCD logging
             // sharedLog = new FileLogger("dcd.log");
-        } else {
+        }
+    else
+        {
             sharedLog = new NullLogger();
         }
     }
@@ -85,18 +95,25 @@ extern (C) int UIAppMain(string[] args) {
     FontManager.minAnitialiasedFontSize = 0;
     /// set font gamma (1.0 is neutral, < 1.0 makes glyphs lighter, >1.0 makes glyphs bolder)
     FontManager.fontGamma = 1.0;
-    version (NO_OPENGL) {
+    version (NO_OPENGL)
+    {
         FontManager.subpixelRenderingMode = SubpixelRenderingMode.BGR;
-    } else {
+    }
+    else
+    {
         FontManager.subpixelRenderingMode = SubpixelRenderingMode.None;
     }
-    version (USE_OPENGL) {
+    version (USE_OPENGL)
+    {
         // you can turn on subpixel font rendering (ClearType) here
         FontManager.subpixelRenderingMode = SubpixelRenderingMode.None; //
         FontManager.fontGamma = 0.9;
         FontManager.hintingMode = HintingMode.AutoHint;
-    } else {
-        version (USE_FREETYPE) {
+    }
+    else
+    {
+        version (USE_FREETYPE)
+        {
             // you can turn on subpixel font rendering (ClearType) here
             FontManager.fontGamma = 0.8;
             //FontManager.subpixelRenderingMode = SubpixelRenderingMode.BGR; //SubpixelRenderingMode.None; //
@@ -110,18 +127,22 @@ extern (C) int UIAppMain(string[] args) {
     //version(USE_GDB_DEBUG) {
     //    debuggerTestGDB();
     //}
-    
+
     // Display critical startup info only (at Fatal level)
     Log.f("DLangIDE starting up");
-    
-    version(unittest) {
+
+    version (unittest)
+    {
         return 0;
-    } else {
+    }
+    else
+    {
 
         // create window (with minimal logging)
         Log.f("Creating main application window");
         Window window = Platform.instance.createWindow("Dlang IDE", null, WindowFlag.Resizable, 900, 730);
-        static if (BACKEND_GUI) {
+        static if (BACKEND_GUI)
+        {
             // set window icon
             window.windowIcon = drawableCache.getImage("dlangui-logo1");
         }
@@ -204,11 +225,14 @@ version(USE_GDB_DEBUG) {
 }
 */
 
-unittest {
-    void jsonTest() {
+unittest
+{
+    void jsonTest()
+    {
         import dlangui.core.settings;
+
         Setting s = new Setting();
-        s["param1_ulong"] = cast(ulong)1543453u;
+        s["param1_ulong"] = cast(ulong) 1543453u;
         s["param2_long"] = cast(long)-22934;
         s["param3_double"] = -39.123e-10;
         s["param4_string"] = "some string value";
@@ -216,7 +240,7 @@ unittest {
         s["param6_bool_false"] = false;
         s["param7_null"] = new Setting();
         Setting a = new Setting();
-        a[0] = cast(ulong)1u;
+        a[0] = cast(ulong) 1u;
         a[1] = cast(long)-2;
         a[2] = 3.3;
         a[3] = "some string value";
@@ -224,13 +248,13 @@ unittest {
         a[5] = false;
         a[6] = new Setting();
         Setting mm = new Setting();
-        mm["n"] = cast(ulong)5u;
+        mm["n"] = cast(ulong) 5u;
         mm["name"] = "test";
         a[7] = mm;
         s["param8_array"] = a;
         Setting m = new Setting();
         m["aaa"] = "bbb";
-        m["aaa2"] = cast(ulong)5u;
+        m["aaa2"] = cast(ulong) 5u;
         m["aaa3"] = false;
         s["param9_object"] = m;
         string json = s.toJSON(true);

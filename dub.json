@@ -1,54 +1,80 @@
 {
-    "name": "dlangide",
-    "description": "Cross platform D language IDE based on dlangui library",
-    "homepage": "https://github.com/buggins/dlangide",
-    "license": "Boost",
-    "authors": ["Vadim Lopatin"],
+  "name": "dnives",
+  "description": "Multi-language IDE with advanced code intelligence and AI integration",
+  "homepage": "https://github.com/buggins/dlangide",
+  "license": "Boost",
+  "authors": ["Vadim Lopatin", "Kirik"],
 
-    "targetName": "dlangide",
-    "targetPath": "bin",
-    "targetType": "executable",
+  "targetName": "dnives",
+  "targetPath": "bin",
+  "targetType": "executable",
 
-    "stringImportPaths": ["views"],
+  "stringImportPaths": ["views"],
 
-    "dependencies": {
-        "dlangui": "~>0.10.3",
-        "dcd": "~>0.16.0-beta.1"
+  "dependencies": {
+    "dlangui": "~>0.10.3",
+    "dcd": "~>0.16.0-beta.1",
+    "d2sqlite3": "~>1.0.0"
+  },
+
+  "copyFiles-windows": ["libs/windows/x86/mago-mi.exe"],
+
+  "libs-linux": ["z"],
+
+  "versions-windows": ["USE_FREETYPE"],
+
+  "configurations": [
+    {
+      "name": "default"
     },
+    {
+      "name": "minimal",
+      "subConfigurations": {
+        "dlangui": "minimal"
+      }
+    },
+    {
+      "name": "console",
+      "subConfigurations": {
+        "dlangui": "console"
+      }
+    },
+    {
+      "name": "x11",
+      "subConfigurations": {
+        "dlangui": "x11"
+      }
+    },
+    {
+      "name": "minimal-test",
+      "mainSourceFile": "src/app_ultraminimal.d",
+      "sourceFiles": ["src/app_ultraminimal.d"],
+      "excludedSourceFiles": [
+        "src/dlangide/**/*",
+        "src/ddc/**/*",
+        "src/ddebug/**/*",
+        "src/dcore/**/*",
+        "src/dlangide_legacy.d",
+        "src/app.d",
+        "src/app_minimal.d"
+      ]
+    },
+    {
+      "name": "dcore-demo",
+      "mainSourceFile": "src/dcore_demo.d",
+      "sourceFiles": ["src/dcore_demo.d"],
+      "excludedSourceFiles": [
+        "src/dlangide/**/*",
+        "src/ddc/**/*",
+        "src/ddebug/**/*",
+        "src/dcore/db/**/*",
+        "src/app.d",
+        "src/app_minimal.d",
+        "src/app_ultraminimal.d",
+        "src/dlangide_legacy.d"
+      ]
+    }
+  ],
 
-    "copyFiles-windows": [
-        "libs/windows/x86/mago-mi.exe"
-    ],
-
-    "libs-linux": ["z"],
-
-    "versions-windows": [
-        "USE_FREETYPE"
-    ],
-
-    "configurations" : [
-        {
-            "name" : "default"
-        },
-        {
-            "name" : "minimal",
-            "subConfigurations" : {
-                "dlangui" : "minimal"
-            }
-        },
-        {
-            "name" : "console",
-            "subConfigurations" : {
-                "dlangui" : "console"
-            }
-        },
-        {
-            "name" : "x11",
-            "subConfigurations" : {
-                "dlangui" : "x11"
-            }
-        }
-    ],
-
-    "versions": ["EmbedStandardResources"]
+  "versions": ["EmbedStandardResources"]
 }
