@@ -26,6 +26,7 @@ import dlangui.dml.parser;
 import dlangui.core.logger;
 
 import dcore.components.cccore;
+import dcore.ai.integration;
 
 /**
  * MainWindow - Primary application window for CompyutinatorCode D implementation
@@ -39,29 +40,29 @@ import dcore.components.cccore;
 class MainWindow : AppFrame {
     // Core components
     private CCCore ccCore;
-    
+
     // UI components
     private DockHost _dockHost;
     private TabWidget _centralTabs;
     private ToolBarHost _toolbarHost;
     private MainMenu _mainMenu;
-    
+
     // Public getters for UI components
     @property DockHost dockHost() { return _dockHost; }
     @property TabWidget centralTabs() { return _centralTabs; }
-    
+
     // Window state
     private bool maximized = false;
     private Rect normalBounds;
     private bool isDragging = false;
     private Point dragStartPos;
     private Rect startBounds;
-    
+
     // Theme and styling
     private string currentTheme = "theme_default";
     private uint accentColor = 0x3080E0;
     private string _windowTitle;
-    
+
     /// Get the parent window
     @property Window parentWindow() {
         // Find the parent window by traversing up the widget hierarchy
@@ -73,62 +74,62 @@ class MainWindow : AppFrame {
         }
         return null;
     }
-    
+
     /**
      * Constructor
      */
     this(string windowTitle = "CompyutinatorCode") {
         super();
-        
+
         // Store window title for later use
         _windowTitle = windowTitle;
-        
+
         // Set minimum window size
         minWidth = 800;
         minHeight = 600;
-        
+
         // Store normal bounds for maximize/restore
         normalBounds = Rect(100, 100, 1200, 900);
-        
+
         // Initialize UI
         initUI();
-        
+
         // Log
         Log.i("MainWindow created");
     }
-    
+
     /**
      * Set the core component
      */
     public void setCore(CCCore core) {
         this.ccCore = core;
-        
+
         // Update UI once core is set
         if (ccCore) {
             updateWindowTitle();
         }
     }
-    
+
     /**
      * Initialize UI components
      */
     private void initUI() {
         // Initialize the AppFrame which creates menu, toolbar, body, and status line
         initialize();
-        
+
         // Set up actions
         setupActions();
     }
-    
+
     /**
      * Create menu bar
      */
     override protected MainMenu createMainMenu() {
         _mainMenu = new MainMenu();
-        
+
         // Create root menu item
         auto rootMenu = new MenuItem();
-        
+
         // File menu
         auto fileMenu = new MenuItem(new Action(1, "&File"d));
         rootMenu.add(fileMenu);
@@ -138,7 +139,7 @@ class MainWindow : AppFrame {
         fileMenu.add(new Action(ActionID.FileSaveAs, "Save As..."d, null, KeyCode.KEY_S, KeyFlag.Control | KeyFlag.Shift));
         fileMenu.addSeparator();
         fileMenu.add(new Action(ActionID.FileExit, "E&xit"d, null, KeyCode.F4, KeyFlag.Alt));
-        
+
         // Edit menu
         auto editMenu = new MenuItem(new Action(2, "&Edit"d));
         rootMenu.add(editMenu);
@@ -151,7 +152,7 @@ class MainWindow : AppFrame {
         editMenu.addSeparator();
         editMenu.add(new Action(ActionID.EditFind, "Find"d, null, KeyCode.KEY_F, KeyFlag.Control));
         editMenu.add(new Action(ActionID.EditReplace, "Replace"d, null, KeyCode.KEY_H, KeyFlag.Control));
-        
+
         // View menu
         auto viewMenu = new MenuItem(new Action(3, "&View"d));
         rootMenu.add(viewMenu);
@@ -162,7 +163,7 @@ class MainWindow : AppFrame {
         viewMenu.add(new Action(ActionID.ViewZoomIn, "Zoom In"d, null, KeyCode.KEY_ADD, KeyFlag.Control));
         viewMenu.add(new Action(ActionID.ViewZoomOut, "Zoom Out"d, null, KeyCode.KEY_SUBTRACT, KeyFlag.Control));
         viewMenu.add(new Action(ActionID.ViewZoomReset, "Reset Zoom"d, null, KeyCode.KEY_0, KeyFlag.Control));
-        
+
         // Project menu
         auto projectMenu = new MenuItem(new Action(4, "&Project"d));
         rootMenu.add(projectMenu);
@@ -171,7 +172,7 @@ class MainWindow : AppFrame {
         projectMenu.add(new Action(ActionID.ProjectClose, "Close Project"d));
         projectMenu.addSeparator();
         projectMenu.add(new Action(ActionID.ProjectSettings, "Project Settings"d));
-        
+
         // Tools menu
         auto toolsMenu = new MenuItem(new Action(5, "&Tools"d));
         rootMenu.add(toolsMenu);
@@ -179,26 +180,26 @@ class MainWindow : AppFrame {
         toolsMenu.add(new Action(ActionID.ToolsThemes, "Themes"d));
         toolsMenu.addSeparator();
         toolsMenu.add(new Action(ActionID.ToolsTerminal, "Terminal"d));
-        
+
         // Help menu
         auto helpMenu = new MenuItem(new Action(6, "&Help"d));
         rootMenu.add(helpMenu);
         helpMenu.add(new Action(ActionID.HelpAbout, "About"d));
         helpMenu.add(new Action(ActionID.HelpDocumentation, "Documentation"d));
-        
+
         // Set menu items
         _mainMenu.menuItems = rootMenu;
-        
+
         return _mainMenu;
     }
-    
+
     /**
      * Create toolbars
      */
     override protected ToolBarHost createToolbars() {
         // Create toolbar host
         _toolbarHost = new ToolBarHost();
-        
+
         // Create main toolbar
         auto mainToolbar = _toolbarHost.getOrAddToolbar("main");
         mainToolbar.addButtons(
@@ -213,34 +214,34 @@ class MainWindow : AppFrame {
             new Action(ActionID.EditUndo, "Undo"d, "edit-undo"),
             new Action(ActionID.EditRedo, "Redo"d, "edit-redo")
         );
-        
+
         // Tools toolbar
         auto toolsToolbar = _toolbarHost.getOrAddToolbar("tools");
         toolsToolbar.addButtons(
             new Action(ActionID.ToolsTerminal, "Terminal"d, "utilities-terminal"),
             new Action(ActionID.ViewExplorer, "Explorer"d, "system-file-manager")
         );
-        
+
         // Add toolbar host to frame
         addChild(_toolbarHost);
         return _toolbarHost;
     }
-    
+
     /**
      * Create dock layout
      */
     private void createDockLayout() {
         // Create dock host
         _dockHost = new DockHost("DOCK_HOST");
-        
+
         // Create central tabs widget
         _centralTabs = new TabWidget("CENTRAL_TABS");
         _dockHost.bodyWidget = _centralTabs;
-        
+
         // Add welcome tab by default
         addWelcomeTab();
     }
-    
+
     /**
      * Override createBody to return our dock host
      */
@@ -248,20 +249,20 @@ class MainWindow : AppFrame {
         createDockLayout();
         return _dockHost;
     }
-    
+
     /**
      * Create status bar
      */
     override protected StatusLine createStatusLine() {
         _statusLine = new StatusLine();
         _statusLine.setStatusText("Ready"d);
-        
+
         // Add cursor position and encoding panels
         _statusLine.setStatusText("position", "Line: 1, Col: 1"d);
         _statusLine.setStatusText("encoding", "UTF-8"d);
         return _statusLine;
     }
-    
+
     /**
      * Override initialize to ensure main menu and toolbar are set
      */
@@ -270,65 +271,65 @@ class MainWindow : AppFrame {
         // Main menu and toolbar are created by parent class
         // Store references are already set in create methods
     }
-    
+
     /**
      * Add welcome tab with information
      */
     private void addWelcomeTab() {
         auto welcomeWidget = new VerticalLayout("WELCOME");
         welcomeWidget.padding(Rect(20, 20, 20, 20));
-        
+
         // Title
         auto title = new TextWidget("WELCOME_TITLE", "Welcome to CompyutinatorCode"d);
         title.textColor = accentColor;
         title.fontSize = 24;
         title.alignment = Align.HCenter;
         welcomeWidget.addChild(title);
-        
+
         // Version info
         auto version_info = new TextWidget("VERSION", "D Language Edition"d);
         version_info.fontSize = 16;
         version_info.alignment = Align.HCenter;
         welcomeWidget.addChild(version_info);
-        
+
         // Spacer
         welcomeWidget.addChild(new VSpacer());
-        
+
         // Quick start buttons
         auto buttonLayout = new HorizontalLayout("QUICK_START");
         buttonLayout.alignment = Align.HCenter;
-        
+
         auto newFileBtn = new Button("NEW_FILE", "New File"d);
         newFileBtn.click = delegate(Widget w) {
             onAction(new Action(ActionID.FileNew));
             return true;
         };
-        
+
         auto openFileBtn = new Button("OPEN_FILE", "Open File"d);
         openFileBtn.click = delegate(Widget w) {
             onAction(new Action(ActionID.FileOpen));
             return true;
         };
-        
+
         auto newProjectBtn = new Button("NEW_PROJECT", "New Project"d);
         newProjectBtn.click = delegate(Widget w) {
             onAction(new Action(ActionID.ProjectNew));
             return true;
         };
-        
+
         buttonLayout.addChild(newFileBtn);
         buttonLayout.addChild(new HSpacer());
         buttonLayout.addChild(openFileBtn);
         buttonLayout.addChild(new HSpacer());
         buttonLayout.addChild(newProjectBtn);
-        
+
         welcomeWidget.addChild(buttonLayout);
         welcomeWidget.addChild(new VSpacer());
-        
+
         // Add tab
         _centralTabs.addTab(welcomeWidget, "Welcome"d);
     }
-    
+
     /**
      * Setup action handlers
      */
@@ -341,7 +342,7 @@ class MainWindow : AppFrame {
             new Action(ActionID.FileSave, "Save"d, null, KeyCode.KEY_S, KeyFlag.Control),
             new Action(ActionID.FileSaveAs, "Save As..."d, null, KeyCode.KEY_S, KeyFlag.Control | KeyFlag.Shift),
             new Action(ActionID.FileExit, "E&xit"d, null, KeyCode.F4, KeyFlag.Alt),
-            
+
             // Edit
             new Action(ActionID.EditUndo, "Undo"d, null, KeyCode.KEY_Z, KeyFlag.Control),
             new Action(ActionID.EditRedo, "Redo"d, null, KeyCode.KEY_Y, KeyFlag.Control),
@@ -350,14 +351,14 @@ class MainWindow : AppFrame {
             new Action(ActionID.EditPaste, "Paste"d, null, KeyCode.KEY_V, KeyFlag.Control),
             new Action(ActionID.EditFind, "Find"d, null, KeyCode.KEY_F, KeyFlag.Control),
             new Action(ActionID.EditReplace, "Replace"d, null, KeyCode.KEY_H, KeyFlag.Control),
-            
+
             // View
             new Action(ActionID.ViewZoomIn, "Zoom In"d, null, KeyCode.KEY_ADD, KeyFlag.Control),
             new Action(ActionID.ViewZoomOut, "Zoom Out"d, null, KeyCode.KEY_SUBTRACT, KeyFlag.Control),
             new Action(ActionID.ViewZoomReset, "Reset Zoom"d, null, KeyCode.KEY_0, KeyFlag.Control),
         ]);
     }
-    
+
     /**
      * Handle action
      */
@@ -380,7 +381,7 @@ class MainWindow : AppFrame {
                 case ActionID.FileExit:
                     window.close();
                     return true;
-                
+
                 // Edit menu
                 case ActionID.EditUndo:
                     handleEditUndo();
@@ -403,7 +404,7 @@ class MainWindow : AppFrame {
                 case ActionID.EditReplace:
                     handleEditReplace();
                     return true;
-                
+
                 // View menu
                 case ActionID.ViewExplorer:
                     toggleDockPanel("Explorer");
@@ -423,7 +424,7 @@ class MainWindow : AppFrame {
                 case ActionID.ViewZoomReset:
                     handleZoomReset();
                     return true;
-                
+
                 // Project menu
                 case ActionID.ProjectNew:
                     handleProjectNew();
@@ -437,7 +438,7 @@ class MainWindow : AppFrame {
                 case ActionID.ProjectSettings:
                     handleProjectSettings();
                     return true;
-                
+
                 // Tools menu
                 case ActionID.ToolsOptions:
                     handleToolsOptions();
@@ -448,7 +449,7 @@ class MainWindow : AppFrame {
                 case ActionID.ToolsTerminal:
                     handleToolsTerminal();
                     return true;
-                
+
                 // Help menu
                 case ActionID.HelpAbout:
                     handleHelpAbout();
@@ -456,35 +457,43 @@ class MainWindow : AppFrame {
                 case ActionID.HelpDocumentation:
                     handleHelpDocumentation();
                     return true;
-                
+
+                // AI menu actions
                 default:
+                    // Check if it's an AI action
+                    if (ccCore && ccCore.dcore && ccCore.dcore.isAIEnabled()) {
+                        auto aiIntegration = ccCore.dcore.getAIIntegration();
+                        if (aiIntegration && aiIntegration.handleMenuAction(action)) {
+                            return true;
+                        }
+                    }
                     break;
             }
         }
         return false;
     }
-    
+
     /**
      * Create a dock panel
      */
     public DockWindow createDockPanel(string id, string caption, Widget content) {
         if (!_dockHost)
             return null;
-            
+
         auto dock = new DockWindow(id);
         dock.bodyWidget = content;
         return dock;
     }
-    
+
     /**
      * Dock a widget to a specific position
      */
     public DockWindow dockWidget(Widget widget, string caption, int dockPosition) {
         if (!_dockHost)
             return null;
-            
+
         DockWindow dock;
-        
+
         final switch (dockPosition) {
             case DockPosition.Left:
                 dock = new DockWindow(id ~ "_LEFT");
@@ -507,17 +516,17 @@ class MainWindow : AppFrame {
                 _dockHost.addDockedWindow(dock);
                 break;
         }
-        
+
         return dock;
     }
-    
+
     /**
      * Toggle dock panel visibility
      */
     public void toggleDockPanel(string id) {
         if (!_dockHost)
             return;
-            
+
         DockWindow dock = null;
         // TODO: Implement dock finding logic
         if (dock) {
@@ -527,7 +536,7 @@ class MainWindow : AppFrame {
             createDockIfNotExists(id);
         }
     }
-    
+
     /**
      * Create dock if it doesn't exist
      */
@@ -552,59 +561,59 @@ class MainWindow : AppFrame {
             dockWidget(output, "Output", DockPosition.Bottom);
         }
     }
-    
+
     /**
      * Add a new editor tab
      */
     public EditBox addEditorTab(string filePath, string content = null) {
         if (!centralTabs)
             return null;
-            
+
         // Create editor
         auto editor = new EditBox("EDITOR_" ~ filePath.baseName);
-        
+
         if (content) {
             // Set content
             editor.text = content.toUTF32;
         }
-        
+
         // Configure editor
         editor.layoutWidth = FILL_PARENT;
         editor.layoutHeight = FILL_PARENT;
         editor.fontFace = "monospace";
         editor.fontSize = 14;
-        
+
         // Add syntax highlighting based on file extension
         // TODO: Implement syntax highlighting based on file extension
-        
+
         // Add tab with editor
         dstring tabCaption = filePath.baseName.toUTF32;
         _centralTabs.addTab(editor, tabCaption);
         _centralTabs.selectTab(_centralTabs.tabCount - 1);
-        
+
         return editor;
     }
-    
+
     /**
      * Get current editor
      */
     public EditBox getCurrentEditor() {
         if (!_centralTabs || _centralTabs.tabCount == 0)
             return null;
-            
+
         Widget tabBody = _centralTabs.selectedTabBody;
         if (auto editor = cast(EditBox)tabBody)
             return editor;
-            
+
         return null;
     }
-    
+
     /**
      * Update window title based on current workspace/file
      */
     public void updateWindowTitle() {
         string title = "CompyutinatorCode";
-        
+
         if (ccCore) {
             // Check if we have workspace
             auto workspace = ccCore.getCurrentWorkspace();
@@ -612,7 +621,7 @@ class MainWindow : AppFrame {
                 title ~= " - " ~ workspace.name;
             }
         }
-        
+
         // Add current file name if any
         if (centralTabs && centralTabs.selectedTabId.length > 0) {
             auto selectedTab = centralTabs.selectedTab;
@@ -621,26 +630,26 @@ class MainWindow : AppFrame {
                 title ~= " [" ~ tabText.toUTF8 ~ "]";
             }
         }
-        
+
         if (parentWindow)
             parentWindow.windowCaption = title.to!dstring;
     }
-    
+
     /**
      * Event: Window is being closed
      */
     bool onCanClose() {
         // Ask to save unsaved files
         // TODO: Check for unsaved changes and ask to save
-        
+
         // Clean up resources
         if (ccCore) {
             ccCore.cleanup();
         }
-        
+
         return true;
     }
-    
+
     /**
      * Event: Key pressed
      */
@@ -653,10 +662,10 @@ class MainWindow : AppFrame {
                 return true;
             }
         }
-        
+
         return super.onKeyEvent(event);
     }
-    
+
     /**
      * Toggle fullscreen mode
      */
@@ -672,19 +681,19 @@ class MainWindow : AppFrame {
             window.setWindowState(WindowState.normal, true, normalBounds);
         }
     }
-    
+
     // ============================================================
     // File menu action handlers
     // ============================================================
-    
+
     void handleFileNew() {
         Log.i("File > New");
         addEditorTab("Untitled.txt", "");
     }
-    
+
     void handleFileOpen() {
         Log.i("File > Open");
-        
+
         auto dlg = new FileDialog(UIString.fromRaw("Open File"), window);
         dlg.addFilter(FileFilterEntry(UIString.fromRaw("All Files (*)"), "*"));
         dlg.addFilter(FileFilterEntry(UIString.fromRaw("Text Files (*.txt)"), "*.txt"));
@@ -697,77 +706,77 @@ class MainWindow : AppFrame {
                     addEditorTab(filename, content);
                 } catch (Exception e) {
                     Log.e("Error opening file: ", e.msg);
-                    window.showMessageBox(UIString.fromRaw("Error"), 
+                    window.showMessageBox(UIString.fromRaw("Error"),
                         UIString.fromRaw("Failed to open file: " ~ e.msg));
                 }
             }
         };
         dlg.show();
     }
-    
+
     void handleFileSave() {
         Log.i("File > Save");
         // TODO: Implement save functionality
     }
-    
+
     void handleFileSaveAs() {
         Log.i("File > Save As");
         // TODO: Implement save as functionality
     }
-    
+
     // ============================================================
     // Edit menu action handlers
     // ============================================================
-    
+
     void handleEditUndo() {
         Log.i("Edit > Undo");
         auto editor = getCurrentEditor();
         if (editor)
             editor.content.undo(this);
     }
-    
+
     void handleEditRedo() {
         Log.i("Edit > Redo");
         auto editor = getCurrentEditor();
         if (editor)
             editor.content.redo(this);
     }
-    
+
     void handleEditCut() {
         Log.i("Edit > Cut");
         auto editor = getCurrentEditor();
         if (editor)
             editor.dispatchAction(new Action(EditorActions.Cut));
     }
-    
+
     void handleEditCopy() {
         Log.i("Edit > Copy");
         auto editor = getCurrentEditor();
         if (editor)
             editor.dispatchAction(new Action(EditorActions.Copy));
     }
-    
+
     void handleEditPaste() {
         Log.i("Edit > Paste");
         auto editor = getCurrentEditor();
         if (editor)
             editor.dispatchAction(new Action(EditorActions.Paste));
     }
-    
+
     void handleEditFind() {
         Log.i("Edit > Find");
         // TODO: Implement find functionality
     }
-    
+
     void handleEditReplace() {
         Log.i("Edit > Replace");
         // TODO: Implement replace functionality
     }
-    
+
     // ============================================================
     // View menu action handlers
     // ============================================================
-    
+
     void handleZoomIn() {
         Log.i("View > Zoom In");
         auto editor = getCurrentEditor();
@@ -775,7 +784,7 @@ class MainWindow : AppFrame {
             // TODO: Implement zoom functionality
         }
     }
-    
+
     void handleZoomOut() {
         Log.i("View > Zoom Out");
         auto editor = getCurrentEditor();
@@ -783,7 +792,7 @@ class MainWindow : AppFrame {
             // TODO: Implement zoom functionality
         }
     }
-    
+
     void handleZoomReset() {
         Log.i("View > Reset Zoom");
         auto editor = getCurrentEditor();
@@ -791,60 +800,79 @@ class MainWindow : AppFrame {
             // TODO: Implement zoom functionality
         }
     }
-    
+
     // ============================================================
     // Project menu action handlers
     // ============================================================
-    
+
     void handleProjectNew() {
         Log.i("Project > New Project");
         // TODO: Implement new project functionality
     }
-    
+
     void handleProjectOpen() {
         Log.i("Project > Open Project");
         // TODO: Implement open project functionality
     }
-    
+
     void handleProjectClose() {
         Log.i("Project > Close Project");
         // TODO: Implement close project functionality
     }
-    
+
     void handleProjectSettings() {
         Log.i("Project > Project Settings");
         // TODO: Implement project settings functionality
     }
-    
+
     // ============================================================
     // Tools menu action handlers
     // ============================================================
-    
+
     void handleToolsOptions() {
         Log.i("Tools > Options");
         // TODO: Implement options dialog
     }
-    
+
     void handleToolsThemes() {
         Log.i("Tools > Themes");
         // TODO: Implement theme selection dialog
     }
-    
+
     void handleToolsTerminal() {
         Log.i("Tools > Terminal");
         toggleDockPanel("Terminal");
     }
-    
+
     // ============================================================
     // Help menu action handlers
     // ============================================================
-    
+
     void handleHelpAbout() {
         Log.i("Help > About");
         window.showMessageBox(UIString.fromRaw("About CompyutinatorCode"),
-            UIString.fromRaw("CompyutinatorCode - D Language Edition\n\nA powerful code editor and development environment."));
+            UIString.fromRaw("CompyutinatorCode - D Language Edition\n\nA powerful code editor and development environment with AI assistance."));
     }
-    
+
+    // Event delegates for AI integration
+    void delegate(string filePath) onFileOpened;
+    void delegate(string filePath) onFileClosed;
+
+    /**
+     * Add keyboard shortcut
+     */
+    void addKeyboardShortcut(string shortcut, int actionId) {
+        // Implementation would add the shortcut to the window's key handling
+        Log.i("MainWindow: Added keyboard shortcut ", shortcut, " for action ", actionId);
+    }
+
+    /**
+     * Get main menu for external modification
+     */
+    MainMenu getMainMenu() {
+        return _mainMenu;
+    }
+
     void handleHelpDocumentation() {
         Log.i("Help > Documentation");
         // TODO: Implement documentation viewer
@@ -871,7 +899,7 @@ enum ActionID : int {
     FileSave,
     FileSaveAs,
     FileExit,
-    
+
     // Edit menu
     EditUndo = 2000,
     EditRedo,
@@ -880,7 +908,7 @@ enum ActionID : int {
     EditPaste,
     EditFind,
     EditReplace,
-    
+
     // View menu
     ViewExplorer = 3000,
     ViewTerminal,
@@ -888,18 +916,18 @@ enum ActionID : int {
     ViewZoomIn,
     ViewZoomOut,
     ViewZoomReset,
-    
+
     // Project menu
     ProjectNew = 4000,
     ProjectOpen,
     ProjectClose,
     ProjectSettings,
-    
+
     // Tools menu
     ToolsOptions = 5000,
     ToolsThemes,
     ToolsTerminal,
-    
+
     // Help menu
     HelpAbout = 6000,
     HelpDocumentation

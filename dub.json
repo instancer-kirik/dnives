@@ -12,7 +12,7 @@
   "stringImportPaths": ["views"],
 
   "dependencies": {
-    "dlangui": "~>0.10.3",
+    "dlangui": "~>0.10.8",
     "dcd": "~>0.16.0-beta.1",
     "d2sqlite3": "~>1.0.0"
   },
@@ -25,7 +25,13 @@
 
   "configurations": [
     {
-      "name": "default"
+      "name": "default",
+      "excludedSourceFiles": [
+        "src/app_minimal.d",
+        "src/app_ultraminimal.d",
+        "src/dcore_demo.d",
+        "src/dlangide_legacy.d"
+      ]
     },
     {
       "name": "minimal",

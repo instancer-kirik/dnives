@@ -1,0 +1,121 @@
+{
+  "default_backend": "openai",
+  "enable_streaming": true,
+  "enable_code_execution": false,
+  "max_context_tokens": 8000,
+  "max_response_tokens": 2000,
+  "temperature": 0.7,
+  "system_prompt": "You are an expert coding assistant specialized in D programming and software development. Help users with code analysis, debugging, refactoring, and development tasks. Always provide specific, actionable suggestions with code examples when possible.",
+
+  "openai": {
+    "api_key": "your_openai_api_key_here",
+    "model": "gpt-4-turbo-preview",
+    "base_url": "https://api.openai.com/v1",
+    "max_tokens": 128000,
+    "organization": null,
+    "timeout_seconds": 30
+  },
+
+  "anthropic": {
+    "api_key": "your_anthropic_api_key_here",
+    "model": "claude-3-sonnet-20240229",
+    "base_url": "https://api.anthropic.com/v1",
+    "max_tokens": 200000,
+    "timeout_seconds": 30
+  },
+
+  "ollama": {
+    "model": "codellama:13b",
+    "base_url": "http://localhost:11434",
+    "timeout_seconds": 60,
+    "options": {
+      "temperature": 0.1,
+      "top_p": 0.9,
+      "repeat_penalty": 1.1
+    }
+  },
+
+  "context_manager": {
+    "max_context_files": 10,
+    "max_file_lines": 500,
+    "max_symbol_references": 25,
+    "context_cache_timeout_minutes": 10,
+    "auto_include_imports": true,
+    "auto_include_references": true,
+    "prioritize_recent_files": true
+  },
+
+  "code_actions": {
+    "validate_changes": true,
+    "create_auto_backups": true,
+    "max_rollback_points": 50,
+    "snapshot_retention_days": 7,
+    "auto_apply_safe_changes": false,
+    "conflict_resolution": "manual"
+  },
+
+  "ui_preferences": {
+    "chat_dock_width": 400,
+    "chat_dock_position": "right",
+    "auto_scroll_chat": true,
+    "show_line_numbers": true,
+    "syntax_highlight_code": true,
+    "show_file_references": true,
+    "compact_mode": false
+  },
+
+  "symbol_tracker": {
+    "enable_real_time_tracking": true,
+    "track_all_workspace_files": true,
+    "max_tracked_files": 1000,
+    "scan_depth": 3,
+    "cache_symbols": true,
+    "update_frequency_seconds": 5
+  },
+
+  "keyboard_shortcuts": {
+    "toggle_ai_chat": "F4",
+    "new_conversation": "Ctrl+Shift+N",
+    "code_suggestions": "Ctrl+Shift+S",
+    "ask_about_selection": "Ctrl+Shift+A",
+    "start_refactoring": "Ctrl+Shift+R",
+    "rollback_changes": "Ctrl+Shift+Z",
+    "apply_suggestion": "Ctrl+Enter",
+    "reject_suggestion": "Ctrl+Shift+Enter"
+  },
+
+  "features": {
+    "code_completion_integration": true,
+    "inline_suggestions": true,
+    "auto_documentation": false,
+    "code_review_mode": true,
+    "multi_file_refactoring": true,
+    "git_integration": true,
+    "lsp_integration": true,
+    "debug_assistance": false
+  },
+
+  "logging": {
+    "log_ai_requests": false,
+    "log_code_changes": true,
+    "log_level": "info",
+    "max_log_size_mb": 10,
+    "rotate_logs": true
+  },
+
+  "security": {
+    "encrypt_api_keys": true,
+    "sandbox_code_execution": true,
+    "allow_file_modifications": true,
+    "require_confirmation_for_changes": true,
+    "audit_trail": true
+  },
+
+  "experimental": {
+    "voice_commands": false,
+    "ai_pair_programming": false,
+    "automatic_testing": false,
+    "performance_optimization": false,
+    "architecture_suggestions": true
+  }
+}

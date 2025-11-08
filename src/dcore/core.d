@@ -21,6 +21,9 @@ import dcore.lsp.lspmanager;
 import dcore.ui.uimanager;
 import dcore.session;
 
+// AI system imports
+import dcore.ai.integration;
+
 /**
  * DCore - Main core class for CompyutinatorCode
  *
@@ -40,6 +43,9 @@ class DCore
     private UIManager _uiManager;
     private SessionManager _sessionManager;
 
+    // AI system integration
+    private AIIntegration _aiIntegration;
+
     // Configuration
     private string _configDir;
     private JSONValue _config;
@@ -47,6 +53,7 @@ class DCore
     // State
     private bool _initialized = false;
     private bool _fastMode = false;
+    private bool _aiEnabled = true;
 
     // Main window reference
     private Widget _mainWindow;
@@ -104,6 +111,11 @@ class DCore
             // Initialize editor manager
             _editorManager.initialize();
 
+            // Initialize AI system if enabled
+            if (_aiEnabled && _mainWindow) {
+                initializeAISystem();
+            }
+
             // Set initialization flag
             _initialized = true;
 
@@ -140,6 +152,11 @@ class DCore
             Log.e("DCore: Error loading configuration: ", e.msg);
             // Use default config
             _config = parseJSON("{}");
+        }
+
+        // Check AI enabled setting
+        if ("ai_enabled" in _config) {
+            _aiEnabled = _config["ai_enabled"].get!bool;
         }
     }
 
@@ -351,9 +368,66 @@ class DCore
         return _uiManager;
     }
 
-    SessionManager sessionManager()
+    /// Get session manager
+    SessionManager getSessionManager()
     {
         return _sessionManager;
+    }
+
+    /// Get AI integration
+    AIIntegration getAIIntegration()
+    {
+        return _aiIntegration;
+    }
+
+    /// Check if AI is enabled
+    bool isAIEnabled()
+    {
+        return _aiEnabled;
+    }
+
+    /// Enable or disable AI system
+    void setAIEnabled(bool enabled)
+    {
+        if (_aiEnabled == enabled) return;
+
+        _aiEnabled = enabled;
+
+        if (enabled && !_aiIntegration && _initialized) {
+            initializeAISystem();
+        } else if (!enabled && _aiIntegration) {
+            _aiIntegration.cleanup();
+            _aiIntegration = null;
+        }
+
+        saveConfig();
+    }
+
+    /// Initialize AI system
+    private void initializeAISystem()
+    {
+        if (_aiIntegration) return;
+
+        try {
+            Log.i("DCore: Initializing AI system...");
+
+            // Create AI integration
+            auto ccCore = cast(CCCore)_mainWindow;
+            auto mainWindow = cast(MainWindow)_mainWindow;
+            _aiIntegration = new AIIntegration(this, ccCore, mainWindow);
+
+            // Initialize with LSP manager
+            _aiIntegration.initialize(_lspManager);
+
+            // Create AI chat dock
+            _aiIntegration.createAIChatDock();
+
+            Log.i("DCore: AI system initialized successfully");
+        } catch (Exception e) {
+            Log.e("DCore: Failed to initialize AI system: ", e.msg);
+            _aiIntegration = null;
+            _aiEnabled = false;
+        }
     }
 
     /// Get configuration directory

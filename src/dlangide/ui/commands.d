@@ -88,6 +88,12 @@ enum IDEActions : int
     ViewToggleStatusbar,
 
     ToolsOpenDMDTraceLog,
+
+    // DCore Integration Actions
+    DCoreShowStatus,
+    DCoreRunTest,
+    DCoreShowConfig,
+    DCoreVaultManager,
 }
 
 __gshared static this()
@@ -261,6 +267,16 @@ const Action ACTION_FIND_TEXT = (new Action(IDEActions.FindInFiles, "FIND_IN_FIL
         .Control | KeyFlag.Shift)).disableByDefault();
 const Action ACTION_TOOLS_OPEN_DMD_TRACE_LOG = (
     new Action(IDEActions.ToolsOpenDMDTraceLog, "OPEN_DMD_TRACE_LOG"c));
+
+// DCore Integration Actions
+const Action ACTION_DCORE_SHOW_STATUS = (
+    new Action(IDEActions.DCoreShowStatus, "MENU_DCORE_SHOW_STATUS"c));
+const Action ACTION_DCORE_RUN_TEST = (
+    new Action(IDEActions.DCoreRunTest, "MENU_DCORE_RUN_TEST"c));
+const Action ACTION_DCORE_SHOW_CONFIG = (
+    new Action(IDEActions.DCoreShowConfig, "MENU_DCORE_SHOW_CONFIG"c));
+const Action ACTION_DCORE_VAULT_MANAGER = (
+    new Action(IDEActions.DCoreVaultManager, "MENU_DCORE_VAULT_MANAGER"c));
 
 const Action[] STD_IDE_ACTIONS = [
     ACTION_EDIT_COPY, ACTION_EDIT_PASTE, ACTION_EDIT_CUT,
