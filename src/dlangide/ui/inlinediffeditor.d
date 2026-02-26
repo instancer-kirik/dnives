@@ -301,9 +301,9 @@ class InlineDiffEditor : VerticalLayout {
     }
 
     // Events
-    Signal!(string) onContentChanged;
-    Signal!(InlineChange[]) onChangesApplied;
-    Signal!(InlineDiffMode) onDiffModeChanged;
+    Signal!(void, string) onContentChanged;  // void return, string param
+    Signal!(void, InlineChange[]) onChangesApplied;  // void return, InlineChange[] param
+    Signal!(void, InlineDiffMode) onDiffModeChanged;  // void return, InlineDiffMode param
 
     this(string filePath = null) {
         super("inlineDiffEditor");
@@ -456,15 +456,15 @@ class InlineDiffEditor : VerticalLayout {
         // Action buttons
         _acceptAllBtn.click = delegate(Widget source) {
             acceptAllChanges();
-            // Signal emission disabled - incompatible Signal API
-            // onChangesApplied.emit() doesn't accept arguments
+            // Emit signal with current pending changes
+            onChangesApplied(_pendingChanges);
             return true;
         };
 
         _rejectAllBtn.click = delegate(Widget source) {
             rejectAllChanges();
-            // Signal emission disabled - incompatible Signal API
-            // onChangesApplied.emit() doesn't accept arguments
+            // Emit signal with current pending changes
+            onChangesApplied(_pendingChanges);
             return true;
         };
 
@@ -473,9 +473,19 @@ class InlineDiffEditor : VerticalLayout {
             return true;
         };
 
-        // Editor content changes - disabled due to signature mismatch
-        // _editor.onContentChange requires 5 arguments but we can only provide a simple delegate
-        // Signal emission disabled - incompatible API
+        // Editor content changes - using keyEvent to detect changes
+        _editor.keyEvent = delegate(Widget source, KeyEvent event) {
+            if (event.action == KeyAction.Text || event.action == KeyAction.KeyDown) {
+                // Content may have changed
+                if (!_hasUnsavedChanges) {
+                    _hasUnsavedChanges = true;
+                }
+                // Emit signal with current content
+                string currentContent = std.utf.toUTF8(_editor.text);
+                onContentChanged(currentContent);
+            }
+            return false; // Let default processing continue
+        };
     }
 
     /// Load file into editor
@@ -560,8 +570,8 @@ class InlineDiffEditor : VerticalLayout {
         // Update button states
         updateModeButtons();
 
-        // Signal emission disabled - incompatible API
-        // onDiffModeChanged is a Signal!InlineDiffMode which requires different handling
+        // Emit signal for mode change
+        onDiffModeChanged(_diffMode);
     }
 
     private void hideCurrentMode() {

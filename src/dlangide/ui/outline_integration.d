@@ -81,9 +81,9 @@ class OutlineIntegrationPanel : VerticalLayout {
     }
 
     // Events
-    Signal!(string, int) onNavigateToLocation;  // (filePath, lineNumber)
-    Signal!(string) onOpenFile;                 // (filePath)
-    Signal!(string, string) onFindReferences;   // (symbol, filePath)
+    Signal!(void, string, int, int) onNavigateToLocation;  // (filePath, lineNumber, column)
+    Signal!(void, string) onOpenFile;                        // (filePath)
+    Signal!(void, string, string, int) onFindReferences;     // (filePath, symbol, line)
 
     this(IDEFrame frame, DCore dcore, EnhancedEditorManager editorManager) {
         super("outlineIntegration");
@@ -215,8 +215,9 @@ class OutlineIntegrationPanel : VerticalLayout {
             return true;
         };
 
-        // Search field handler - disabled due to signature mismatch
-        // _globalSearchField.onContentChange requires different delegate signature
+        // Search field handler - disabled due to API incompatibility
+        // onContentChange is a method that requires 5 args, not a delegate property
+        // Would need to use keyEvent or a different approach
 
         _nextResultBtn.click = delegate(Widget source) {
             navigateToNextResult();
@@ -407,47 +408,64 @@ class OutlineIntegrationPanel : VerticalLayout {
     }
 
     private void showJumpToFileDialog() {
-        // Create quick file picker dialog - disabled due to API issues
-        // auto dialog = new QuickFilePickerDialog(_workspaceOutline.rootItem, window);
-        // dialog.onFileSelected = delegate(string filePath) {
-        //     openFileInEditor(filePath);
-        //     return true;
-        // };
-        // dialog.show();
-        writeln("Jump to file dialog disabled - API incompatibilities");
+        // Create quick file picker dialog
+        string[] files = collectFilesFromWorkspace();
+        auto dialog = new QuickFilePickerDialog(files, window);
+        dialog.onFileSelected = delegate(string filePath) {
+            openFileInEditor(filePath);
+            return true;
+        };
+        dialog.show();
+    }
+
+    private string[] collectFilesFromWorkspace() {
+        // Collect all file paths from workspace
+        string[] files;
+        auto root = _workspaceOutline.rootItem;
+        collectFilesRecursive(root, files);
+        return files;
+    }
+
+    private void collectFilesRecursive(WorkspaceItem item, ref string[] files) {
+        if (item.type == WorkspaceItemType.File ||
+            item.type == WorkspaceItemType.SourceFile ||
+            item.type == WorkspaceItemType.TestFile) {
+            files ~= item.path;
+        }
+        foreach (child; item.children) {
+            collectFilesRecursive(child, files);
+        }
     }
 
     private void showJumpToSymbolDialog() {
         if (!_activeEditor) return;
 
-        // Create quick symbol picker for current file - disabled due to API issues
-        // auto symbols = _fileOutline.symbols;
-        // auto dialog = new QuickSymbolPickerDialog(symbols, window);
-        // dialog.onSymbolSelected = delegate(FileSymbol symbol) {
-        //     navigateToSymbol(symbol);
-        //     return true;
-        // };
-        // dialog.show();
-        writeln("Jump to symbol dialog disabled - API incompatibilities");
+        // Create quick symbol picker for current file
+        auto symbols = _fileOutline.symbols;
+        auto dialog = new QuickSymbolPickerDialog(symbols, window);
+        dialog.onSymbolSelected = delegate(FileSymbol symbol) {
+            navigateToSymbol(symbol);
+            return true;
+        };
+        dialog.show();
     }
 
     private void showOutlineSettings() {
-        // Show combined settings dialog for both outlines - disabled due to API issues
-        // auto dialog = new CombinedOutlineSettingsDialog(
-        //     _workspaceOutline.config,
-        //     _fileOutline.config,
-        //     window
-        // );
-        // dialog.onWorkspaceConfigChanged = delegate(WorkspaceConfig config) {
-        //     _workspaceOutline.config = config;
-        //     return true;
-        // };
-        // dialog.onFileConfigChanged = delegate(OutlineConfig config) {
-        //     _fileOutline.config = config;
-        //     return true;
-        // };
-        // dialog.show();
-        writeln("Outline settings dialog disabled - API incompatibilities");
+        // Show combined settings dialog for both outlines
+        auto dialog = new CombinedOutlineSettingsDialog(
+            _workspaceOutline.config,
+            _fileOutline.config,
+            window
+        );
+        dialog.onWorkspaceConfigChanged = delegate(WorkspaceConfig config) {
+            _workspaceOutline.config = config;
+            return true;
+        };
+        dialog.onFileConfigChanged = delegate(OutlineConfig config) {
+            _fileOutline.config = config;
+            return true;
+        };
+        dialog.show();
     }
 
     private void openFileInEditor(string filePath) {
@@ -458,13 +476,17 @@ class OutlineIntegrationPanel : VerticalLayout {
             }
         }
 
-        // Signal emission disabled - incompatible Signal API
-        // onOpenFile requires different handling
+        // Emit signal for file opened
+        if (onOpenFile.assigned) {
+            onOpenFile(filePath);
+        }
     }
 
     private void navigateToSymbol(FileSymbol symbol) {
-        // Signal emission disabled - incompatible Signal API
-        // onNavigateToLocation requires different handling
+        // Emit signal for navigation
+        if (onNavigateToLocation.assigned) {
+            onNavigateToLocation(_activeFilePath, symbol.startLine, symbol.startColumn);
+        }
 
         // Also focus the editor and scroll to symbol
         if (_activeEditor) {
@@ -553,8 +575,10 @@ class OutlineIntegrationPanel : VerticalLayout {
     }
 
     private void findSymbolReferences(FileSymbol symbol) {
-        // Signal emission disabled - incompatible Signal API
-        // onFindReferences requires different handling
+        // Emit signal for find references
+        if (onFindReferences.assigned) {
+            onFindReferences(_activeFilePath, symbol.name, symbol.startLine);
+        }
     }
 
     /// Get current workspace outline

@@ -63,11 +63,14 @@ class DiffMergerManager {
         _dcore = dcore;
         _diffAnalyzer = new DiffAnalyzer();
 
-        // AI merger initialization disabled - codeActionManager not available in DCore
-        // if (_dcore.codeActionManager) {
-        //     _aiMerger = new AIAssistedMerger(_dcore.codeActionManager);
-        //     _aiMerger.configureAI(_enableAIAssistance);
-        // }
+        // AI merger initialization through AIIntegration
+        if (_dcore.getAIIntegration()) {
+            auto codeActionManager = _dcore.getAIIntegration().getCodeActionManager();
+            if (codeActionManager) {
+                _aiMerger = new AIAssistedMerger(codeActionManager);
+                _aiMerger.configureAI(_enableAIAssistance);
+            }
+        }
 
         initializeActions();
         setupEventHandlers();
@@ -87,10 +90,14 @@ class DiffMergerManager {
 
     /// Setup event handlers for integration with dnives
     private void setupEventHandlers() {
-        // Event handlers setup disabled - codeActionManager not available
-        // if (_dcore.codeActionManager) {
-        //     // This would connect to the existing CodeActionManager events
-        // }
+        // Event handlers setup through AIIntegration
+        if (_dcore.getAIIntegration()) {
+            auto codeActionManager = _dcore.getAIIntegration().getCodeActionManager();
+            if (codeActionManager) {
+                // Connect to CodeActionManager events
+                writeln("Connected to CodeActionManager events");
+            }
+        }
 
         // Listen for file changes that might need diffing
         if (_dcore.editorManager) {

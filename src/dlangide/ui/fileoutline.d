@@ -253,11 +253,22 @@ class FileOutlineWidget : VerticalLayout {
             return true;
         };
 
-        // Search field handler - disabled due to signature mismatch
-        // _searchField.onContentChange requires different delegate signature
+        // Search field handler using keyEvent instead of onContentChange
+        _searchField.keyEvent = delegate(Widget source, KeyEvent event) {
+            if (event.action == KeyAction.Text || event.action == KeyAction.KeyUp) {
+                _searchQuery = std.utf.toUTF8(_searchField.text);
+                filterSymbols();
+            }
+            return false; // Let default processing continue
+        };
 
-        // Tree selection handlers disabled - properties don't exist in current dlangui
-        // These would need alternative implementation
+        // Tree selection handler using selectionChange signal
+        _outlineTree.selectionChange.connect(delegate(TreeItems source, TreeItem selectedItem, bool activated) {
+            if (selectedItem !is null) {
+                // Navigate to selected symbol
+                navigateToSelectedSymbol(selectedItem);
+            }
+        });
     }
 
     private void initializeParsers() {
@@ -528,22 +539,48 @@ class FileOutlineWidget : VerticalLayout {
     private void updateTreeDisplay() {
         _outlineTree.clearAllItems();
 
-        // Tree display disabled - TreeItem API incompatible with current dlangui
-        // Would need to use proper TreeWidget API with adapter
+        // Build tree using proper dlangui API
+        if (_filteredSymbols.length > 0) {
+            buildTreeItems(_outlineTree.items, _filteredSymbols);
+        }
+    }
+
+    private void buildTreeItems(TreeItem parent, FileSymbol[] symbols) {
+        foreach (ref symbol; symbols) {
+            TreeItem treeItem = createTreeItem(symbol);
+            if (treeItem) {
+                parent.addChild(treeItem);
+                if (symbol.isExpanded) {
+                    treeItem.expand();
+                }
+            }
+        }
+    }
+
+    private void navigateToSelectedSymbol(TreeItem item) {
+        if (item is null) return;
+        // Navigate to the symbol location in editor
+        // The symbol reference would need to be stored in intParam or objectParam
+        writeln("Navigate to: ", item.text);
     }
 
     private TreeItem createTreeItem(ref FileSymbol symbol) {
-        // Note: TreeItem API differs from expected
-        // Creating items with proper ID and label
-        auto item = new TreeItem(symbol.name, generateItemText(symbol).toUTF32());
-        // tag property doesn't exist - would need alternative storage
-        // item.iconId = getSymbolIcon(symbol.type); - property doesn't exist
-        // expanded property not accessible from module
+        // Use proper TreeItem constructor with id, label, and icon
+        string itemId = format("symbol_%s_%d", symbol.name, symbol.startLine);
+        dstring label = generateItemText(symbol).toUTF32();
+        string iconRes = getSymbolIcon(symbol.type);
 
-        // Add children
+        TreeItem item = new TreeItem(itemId, label, iconRes);
+
+        // Store line number in intParam for navigation
+        item.intParam = symbol.startLine;
+
+        // Add children recursively
         foreach (ref child; symbol.children) {
-            auto childItem = createTreeItem(child);
-            // item.addChild(childItem); - API incompatible
+            TreeItem childItem = createTreeItem(child);
+            if (childItem) {
+                item.addChild(childItem);
+            }
         }
 
         return item;
@@ -627,8 +664,12 @@ class FileOutlineWidget : VerticalLayout {
     private void showSettingsDialog() {
         // Create settings dialog
         auto dialog = new OutlineSettingsDialog(_config, window);
-        // Settings dialog event handling disabled - delegate has no connect method
-        // dialog.onConfigChanged would need proper Signal type
+        // Use proper delegate assignment for settings change notification
+        dialog.onConfigChanged = delegate(OutlineConfig newConfig) {
+            _config = newConfig;
+            refreshOutline();
+            return true;
+        };
         dialog.show();
     }
 

@@ -325,26 +325,119 @@ class WorkspaceOutlineWidget : VerticalLayout {
             return true;
         };
 
-        // View mode combo handler - disabled due to API incompatibility
-        // _viewModeCombo.onSelectionChange not available in this dlangui version
+        // Tree selection handler - using proper dlangui API
+        _workspaceTree.selectionChange.connect(delegate(TreeItems source, TreeItem selectedItem, bool activated) {
+            if (selectedItem !is null) {
+                // Find the corresponding WorkspaceItem by id
+                auto wsItem = findWorkspaceItemById(selectedItem.id);
+                if (wsItem !is null) {
+                    if (activated) {
+                        handleItemDoubleClick(*wsItem);
+                    } else if (onItemSelected !is null) {
+                        onItemSelected(*wsItem);
+                    }
+                }
+            }
+        });
 
-        // Search field handler - disabled due to signature mismatch
-        // onContentChange requires 5 arguments but we can only provide a simple delegate
-        // _searchField.onContentChange = delegate(...) {}
+        // Tree popup menu handler
+        _workspaceTree.popupMenu = delegate(TreeItems source, TreeItem selectedItem) {
+            if (selectedItem !is null) {
+                auto wsItem = findWorkspaceItemById(selectedItem.id);
+                if (wsItem !is null) {
+                    return buildContextMenu(*wsItem);
+                }
+            }
+            return null;
+        };
 
-        // Tree selection handlers - disabled due to TreeWidget API incompatibility
-        // onItemSelected and onItemDoubleClicked not available in this version
+        // View mode combo handler - using itemClick signal
+        _viewModeCombo.itemClick.connect(delegate(Widget source, int index) {
+            updateViewMode(index);
+            return true;
+        });
 
-        // Tree right-click handler - disabled due to API incompatibility
-        // _workspaceTree.onItemRightClicked is not available in this dlangui version
+        // Search field handler - using text change detection
+        // Note: onContentChange has complex signature, using click/enter for now
+        _searchField.keyEvent = delegate(Widget source, KeyEvent event) {
+            if (event.action == KeyAction.Text || event.action == KeyAction.KeyUp) {
+                _searchQuery = std.utf.toUTF8(_searchField.text);
+                filterWorkspace();
+            }
+            return false; // Let default processing continue
+        };
     }
 
     private void createContextMenus() {
-        // Context menus disabled due to PopupMenu API incompatibility
-        // The PopupMenu class doesn't have addItem/addSeparator methods in this version
+        // Context menus created as MenuItem structures
+        // They will be built dynamically via the popupMenu handler
         _fileContextMenu = null;
         _folderContextMenu = null;
         _projectContextMenu = null;
+    }
+
+    private MenuItem buildContextMenu(WorkspaceItem item) {
+        MenuItem menu = new MenuItem();
+
+        final switch (item.type) {
+            case WorkspaceItemType.File:
+            case WorkspaceItemType.SourceFile:
+            case WorkspaceItemType.TestFile:
+            case WorkspaceItemType.ConfigFile:
+            case WorkspaceItemType.Documentation:
+            case WorkspaceItemType.BuildFile:
+            case WorkspaceItemType.Resource:
+                menu.add(new Action(1001, "Open"d, "document-open"));
+                menu.add(new Action(1002, "Open With..."d));
+                menu.addSeparator();
+                menu.add(new Action(1003, "Show Diff"d, "diff"));
+                menu.add(new Action(1004, "Show History"d, "history"));
+                menu.addSeparator();
+                menu.add(new Action(1005, "Rename"d, "edit"));
+                menu.add(new Action(1006, "Delete"d, "delete"));
+                menu.add(new Action(1007, "Properties"d, "properties"));
+                break;
+
+            case WorkspaceItemType.Project:
+                menu.add(new Action(3001, "Build"d, "build"));
+                menu.add(new Action(3002, "Rebuild"d, "rebuild"));
+                menu.add(new Action(3003, "Clean"d, "clean"));
+                menu.add(new Action(3004, "Run"d, "run"));
+                menu.add(new Action(3005, "Debug"d, "debug"));
+                menu.add(new Action(3006, "Test"d, "test"));
+                menu.addSeparator();
+                menu.add(new Action(3007, "Dependencies"d, "dependencies"));
+                menu.add(new Action(3008, "Properties"d, "properties"));
+                menu.addSeparator();
+                menu.add(new Action(3009, "Close Project"d, "close"));
+                break;
+
+            case WorkspaceItemType.Folder:
+            case WorkspaceItemType.VirtualFolder:
+            case WorkspaceItemType.Workspace:
+                menu.add(new Action(2001, "New File"d, "document-new"));
+                menu.add(new Action(2002, "New Folder"d, "folder-new"));
+                menu.addSeparator();
+                menu.add(new Action(2003, "Add Existing File..."d));
+                menu.add(new Action(2004, "Import Project..."d));
+                menu.addSeparator();
+                menu.add(new Action(2005, "Open in Terminal"d, "terminal"));
+                menu.add(new Action(2006, "Open in File Manager"d, "folder"));
+                menu.addSeparator();
+                menu.add(new Action(2007, "Rename"d, "edit"));
+                menu.add(new Action(2008, "Delete"d, "delete"));
+                break;
+
+            case WorkspaceItemType.Dependency:
+            case WorkspaceItemType.GitSubmodule:
+            case WorkspaceItemType.Link:
+            case WorkspaceItemType.Unknown:
+                menu.add(new Action(1001, "Open"d, "document-open"));
+                menu.add(new Action(1007, "Properties"d, "properties"));
+                break;
+        }
+
+        return menu;
     }
 
     private void initializeWorkspace() {
@@ -705,11 +798,15 @@ class WorkspaceOutlineWidget : VerticalLayout {
             case WorkspaceItemType.TestFile:
             case WorkspaceItemType.ConfigFile:
             case WorkspaceItemType.Documentation:
-                // Signal emission disabled due to API incompatibility
+                if (onFileOpened !is null) {
+                    onFileOpened(item.path);
+                }
                 break;
 
             case WorkspaceItemType.Project:
-                // Signal emission disabled due to API incompatibility
+                if (onProjectOpened !is null) {
+                    onProjectOpened(item.path);
+                }
                 break;
 
             case WorkspaceItemType.Folder:
@@ -730,7 +827,9 @@ class WorkspaceOutlineWidget : VerticalLayout {
                 break;
         }
 
-        // Signal emission disabled due to API incompatibility
+        if (onItemDoubleClicked !is null) {
+            onItemDoubleClicked(item);
+        }
     }
 
     private void showContextMenu(WorkspaceItem item) {
@@ -817,15 +916,83 @@ class WorkspaceOutlineWidget : VerticalLayout {
     private void updateTreeDisplay() {
         _workspaceTree.clearAllItems();
 
-        // Tree display disabled due to TreeItem/TreeWidget API incompatibility
-        // TreeItem constructor and addChild have incompatible signatures
-        writeln("Tree display update disabled - API incompatibilities");
+        // Build tree using proper dlangui API
+        if (_rootItem.name.length > 0) {
+            buildTreeItems(_workspaceTree.items, _rootItem);
+        }
+    }
+
+    private void buildTreeItems(TreeItem parent, ref WorkspaceItem item) {
+        // Create TreeItem with proper constructor
+        string itemId = getUniqueItemId(item);
+        dstring label = toUTF32(generateItemText(item));
+        string iconRes = getItemIcon(item.type);
+
+        TreeItem treeItem = parent.newChild(itemId, label, iconRes);
+        // Note: expanded is protected, handled by TreeItems
+        if (item.isExpanded) {
+            treeItem.expand();
+        } else {
+            treeItem.collapse();
+        }
+
+        // Store reference to WorkspaceItem via objectParam
+        // Note: This is a workaround since we can't use custom tags
+        // We'll maintain a separate lookup map
+
+        // Add children recursively
+        foreach (ref child; item.children) {
+            if (shouldShowItem(child)) {
+                buildTreeItems(treeItem, child);
+            }
+        }
+    }
+
+    private bool shouldShowItem(WorkspaceItem item) {
+        // Check if item matches current search/filter criteria
+        if (_searchQuery.empty) return true;
+
+        string searchLower = _caseSensitiveSearch ? _searchQuery : _searchQuery.toLower();
+        string itemName = _caseSensitiveSearch ? item.name : item.name.toLower();
+
+        return itemName.canFind(searchLower);
+    }
+
+    private string getUniqueItemId(WorkspaceItem item) {
+        // Generate unique ID based on path
+        return item.path.empty ? item.name : item.path;
+    }
+
+    private WorkspaceItem* findWorkspaceItemById(string id) {
+        return findWorkspaceItemByIdRecursive(_rootItem, id);
+    }
+
+    private WorkspaceItem* findWorkspaceItemByIdRecursive(ref WorkspaceItem item, string id) {
+        if (getUniqueItemId(item) == id) {
+            return &item;
+        }
+
+        foreach (ref child; item.children) {
+            auto result = findWorkspaceItemByIdRecursive(child, id);
+            if (result !is null) return result;
+        }
+
+        return null;
     }
 
     private TreeItem createTreeItem(ref WorkspaceItem item) {
-        // TreeItem creation disabled - constructor requires (string id, dstring label)
-        // and TreeItem is not a Widget so cannot be added with addChild
-        return null;
+        // Use the proper TreeItem constructor
+        string itemId = getUniqueItemId(item);
+        dstring label = toUTF32(generateItemText(item));
+        string iconRes = getItemIcon(item.type);
+
+        TreeItem treeItem = new TreeItem(itemId, label, iconRes);
+        // Note: expanded is protected, use expand/collapse methods
+        if (item.isExpanded) {
+            treeItem.expand();
+        }
+
+        return treeItem;
     }
 
     private string generateItemText(WorkspaceItem item) {
@@ -951,18 +1118,41 @@ class WorkspaceOutlineWidget : VerticalLayout {
     }
 
     private void createNewProject() {
-        // Show new project dialog - disabled due to Signal API incompatibility
-        writeln("New project dialog disabled - API incompatibilities");
+        auto dialog = new NewProjectDialog(window);
+        dialog.onProjectCreated = delegate(string projectPath) {
+            writeln("New project created: ", projectPath);
+            // Would add project to workspace here
+            return true;
+        };
+        dialog.show();
     }
 
     private void createNewFolder() {
-        // Show new folder dialog - disabled due to Signal API incompatibility
-        writeln("New folder dialog disabled - API incompatibilities");
+        auto selected = getSelectedItem();
+        if (selected is null) {
+            selected = &_rootItem;
+        }
+
+        auto dialog = new InputDialog("New Folder"d, "Enter folder name:"d, window);
+        dialog.onInputAccepted = delegate(string folderName) {
+            createFolderInItem(*selected, folderName);
+            return true;
+        };
+        dialog.show();
     }
 
     private void createNewFile() {
-        // Show new file dialog - disabled due to Signal API incompatibility
-        writeln("New file dialog disabled - API incompatibilities");
+        auto selected = getSelectedItem();
+        if (selected is null) {
+            selected = &_rootItem;
+        }
+
+        auto dialog = new InputDialog("New File"d, "Enter file name:"d, window);
+        dialog.onInputAccepted = delegate(string fileName) {
+            createFileInItem(*selected, fileName);
+            return true;
+        };
+        dialog.show();
     }
 
     private WorkspaceItem* getSelectedItem() {
@@ -1013,8 +1203,10 @@ class WorkspaceOutlineWidget : VerticalLayout {
             parentItem.children ~= newItem;
             updateTreeDisplay();
 
-            // Open the new file - disabled due to delegate API incompatibility
-            // onFileOpened is a delegate, checking .assigned is invalid
+            // Open the new file
+            if (onFileOpened !is null) {
+                onFileOpened(filePath);
+            }
 
             writeln("Created file: ", filePath);
         } catch (Exception e) {
@@ -1023,8 +1215,13 @@ class WorkspaceOutlineWidget : VerticalLayout {
     }
 
     private void showSettingsDialog() {
-        // Settings dialog disabled due to Signal API incompatibility
-        writeln("Settings dialog disabled - API incompatibilities");
+        auto dialog = new WorkspaceSettingsDialog(_config, window);
+        dialog.onConfigChanged = delegate(WorkspaceConfig newConfig) {
+            _config = newConfig;
+            refreshWorkspace();
+            return true;
+        };
+        dialog.show();
     }
 
     /// Get current workspace item structure

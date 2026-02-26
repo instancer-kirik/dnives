@@ -84,11 +84,13 @@ class EnhancedEditorManager {
         _frame = frame;
         _dcore = dcore;
 
-        // AI merger initialization disabled - codeActionManager not available in DCore
-        // if (dcore.codeActionManager) {
-        //     _aiMerger = new AIAssistedMerger(dcore.codeActionManager);
-        //     _diffManager = new DiffMergerManager(dcore);
-        // }
+        // AI merger initialization through AIIntegration
+        if (dcore.getAIIntegration()) {
+            auto codeActionManager = dcore.getAIIntegration().getCodeActionManager();
+            if (codeActionManager) {
+                _aiMerger = new AIAssistedMerger(codeActionManager);
+            }
+        }
         _diffManager = new DiffMergerManager(dcore);
 
         initializeUI();
@@ -200,10 +202,14 @@ class EnhancedEditorManager {
             return true;
         };
 
-        // AI chat suggestions disabled - codeActionManager not available
-        // if (_dcore && _dcore.codeActionManager) {
-        //     // This would connect to AI chat events in real implementation
-        // }
+        // AI chat suggestions through AIIntegration
+        if (_dcore && _dcore.getAIIntegration()) {
+            auto codeActionManager = _dcore.getAIIntegration().getCodeActionManager();
+            if (codeActionManager) {
+                _aiMerger = new AIAssistedMerger(codeActionManager);
+                updateToolbarState();
+            }
+        }
     }
 
     /// Open file in enhanced editor
