@@ -1,0 +1,34 @@
+{
+    "name": "chatgpt-enhanced-search",
+    "description": "Enhanced search functionality for ChatGPT conversations",
+    "authors": ["Your Name"],
+    "license": "MIT",
+    "targetType": "executable",
+    "mainSourceFile": "source/chatgpt_search_integration.d",
+
+    "configurations": [
+        {
+            "name": "search-tool",
+            "targetType": "executable",
+            "mainSourceFile": "source/chatgpt_search_integration.d",
+            "targetName": "chatgpt-search"
+        },
+        {
+            "name": "library",
+            "targetType": "library",
+            "excludedSourceFiles": ["source/chatgpt_search_integration.d"]
+        }
+    ],
+
+    "dependencies": {
+    },
+
+    "buildTypes": {
+        "debug": {
+            "buildOptions": ["debugMode", "debugInfo"]
+        },
+        "release": {
+            "buildOptions": ["releaseMode", "optimize", "inline"]
+        }
+    }
+}

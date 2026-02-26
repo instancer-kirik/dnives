@@ -1,0 +1,21 @@
+{
+  "name": "dnives",
+  "description": "Command-line tool to handle files opened from Dolphin file manager",
+  "authors": ["DlangIDE"],
+  "copyright": "Copyright © 2024",
+  "license": "Boost",
+  "targetType": "executable",
+  "targetPath": "../../bin",
+  "targetName": "dnives",
+  "sourcePaths": ["."],
+  "buildTypes": {
+    "release": {
+      "buildOptions": ["releaseMode", "optimize", "inline"],
+      "dflags": ["-boundscheck=off"]
+    },
+    "debug": {
+      "buildOptions": ["debugMode", "debugInfo"],
+      "versions": ["DEBUG"]
+    }
+  }
+}

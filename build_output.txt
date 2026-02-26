@@ -1,0 +1,173 @@
+     Warning Warning: License in sub-package dcd:dsymbol is different than its parent package, this is discouraged.
+    Starting Performing "debug" build using /usr/bin/dmd for x86_64.
+  Up-to-date d2sqlite3 1.0.0: target for configuration [with-lib] is up to date.
+  Up-to-date msgpack-d 1.0.5: target for configuration [default] is up to date.
+  Up-to-date dcd:common 0.16.0-beta.3: target for configuration [library] is up to date.
+  Up-to-date emsi_containers 0.9.0: target for configuration [library] is up to date.
+  Up-to-date libdparse 0.25.0: target for configuration [library] is up to date.
+  Up-to-date dcd:dsymbol 0.16.0-beta.3: target for configuration [library] is up to date.
+  Up-to-date dcd 0.16.0-beta.3: target for configuration [library] is up to date.
+  Up-to-date arsd-official:characterencodings 10.9.10: target for configuration [library] is up to date.
+  Up-to-date arsd-official:dom 10.9.10: target for configuration [library] is up to date.
+  Up-to-date arsd-official:color_base 10.9.10: target for configuration [library] is up to date.
+  Up-to-date arsd-official:bmp 10.9.10: target for configuration [library] is up to date.
+  Up-to-date arsd-official:imageresize 10.9.10: target for configuration [library] is up to date.
+  Up-to-date arsd-official:jpeg 10.9.10: target for configuration [library] is up to date.
+  Up-to-date arsd-official:png 10.9.10: target for configuration [library] is up to date.
+  Up-to-date arsd-official:svg 10.9.10: target for configuration [library] is up to date.
+  Up-to-date arsd-official:image_files 10.9.10: target for configuration [library] is up to date.
+  Up-to-date bindbc-common 0.1.6: target for configuration [noBC] is up to date.
+  Up-to-date bindbc-loader 1.1.5: target for configuration [noBC] is up to date.
+  Up-to-date bindbc-freetype 1.2.6: target for configuration [dynamic] is up to date.
+  Up-to-date bindbc-opengl 1.1.1: target for configuration [dynamic] is up to date.
+  Up-to-date bindbc-sdl 1.4.8: target for configuration [dynamic] is up to date.
+  Up-to-date inilike 1.2.3: target for configuration [library] is up to date.
+  Up-to-date isfreedesktop 0.1.1: target for configuration [library] is up to date.
+  Up-to-date xdgpaths 0.2.5: target for configuration [library] is up to date.
+  Up-to-date icontheme 1.2.3: target for configuration [library] is up to date.
+  Up-to-date dlangui 0.10.8: target for configuration [default] is up to date.
+    Building dnives ~master: building configuration [default]
+/home/bon/.dub/packages/arsd-official/10.9.10/arsd-official/svg.d(4657,15): Deprecation: using `in` parameters with `extern(C)` functions is deprecated
+extern(C) int nsvg__cmpEdge (in void *p, in void *q) nothrow @trusted @nogc {
+              ^
+/home/bon/.dub/packages/arsd-official/10.9.10/arsd-official/svg.d(4657,15):        parameter `p` declared as `in` here
+/home/bon/.dub/packages/arsd-official/10.9.10/arsd-official/svg.d(4657,15): Deprecation: using `in` parameters with `extern(C)` functions is deprecated
+extern(C) int nsvg__cmpEdge (in void *p, in void *q) nothrow @trusted @nogc {
+              ^
+/home/bon/.dub/packages/arsd-official/10.9.10/arsd-official/svg.d(4657,15):        parameter `q` declared as `in` here
+src/dcore/notebooks/widgets/notebook_widget.d(542,31): Error: no property `add` for `(cast(TreeWidgetBase)this._outlineTree).items()` of type `dlangui.widgets.tree.TreeItems`
+            _outlineTree.items.add(sectionItem);
+                              ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/widgets/tree.d(394,1):        class `TreeItems` defined here
+class TreeItems : TreeItem {
+^
+src/dcore/notebooks/widgets/notebook_widget.d(544,13): Error: none of the overloads of `text` are callable using argument types `(string)`
+            sectionItem.text = section.name;
+            ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/widgets/tree.d(224,23):        Candidates are: `dlangui.widgets.tree.TreeItem.text()`
+    @property dstring text() { return _text; }
+                      ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/widgets/tree.d(226,24):                        `dlangui.widgets.tree.TreeItem.text(dstring s)`
+    @property TreeItem text(dstring s) {
+                       ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/widgets/tree.d(231,24):                        `dlangui.widgets.tree.TreeItem.text(UIString s)`
+    @property TreeItem text(UIString s) {
+                       ^
+src/dcore/notebooks/widgets/notebook_widget.d(545,24): Error: no property `canSelect` for `sectionItem` of type `dlangui.widgets.tree.TreeItem`
+            sectionItem.canSelect = true;
+                       ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/widgets/tree.d(82,1):        class `TreeItem` defined here
+class TreeItem {
+^
+src/dcore/notebooks/widgets/notebook_widget.d(552,53): Error: function `dlangui.widgets.tree.TreeItem.newChild(string id, dstring label, string iconRes = null)` is not callable using argument types `()`
+                auto cellItem = sectionItem.newChild();
+                                                    ^
+src/dcore/notebooks/widgets/notebook_widget.d(552,53):        missing argument for parameter #1: `string id`
+src/dcore/notebooks/widgets/notebook_widget.d(581,21): Error: no property `itemClick` for `this._outlineTree` of type `dlangui.widgets.tree.TreeWidget`
+        _outlineTree.itemClick = (TreeItem item) {
+                    ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/widgets/tree.d(1026,1):        class `TreeWidget` defined here
+class TreeWidget :  TreeWidgetBase {
+^
+src/dcore/notebooks/widgets/notebook_widget.d(682,55): Error: no property `Hidden` for type `ScrollBarMode`
+        _mainScroll = new ScrollWidget("cell_scroll", ScrollBarMode.Hidden, ScrollBarMode.Auto);
+                                                      ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/widgets/scroll.d(79,1):        enum `ScrollBarMode` defined here
+enum ScrollBarMode {
+^
+src/dlangide/ui/aimerger.d(620,48): Error: `toUTF8` matches conflicting symbols:
+                _modelCombo.selectedItem.toUTF8(),
+                                               ^
+/usr/include/dlang/dmd/std/utf.d(2973,8):        function `std.utf.toUTF8!dstring.toUTF8`
+string toUTF8(S)(S s)
+       ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/core/types.d(648,8):        function `dlangui.core.types.toUTF8`
+string toUTF8(dstring str) {
+       ^
+src/dlangide/ui/aimerger.d(629,35): Error: function `dlangui.core.signals.Signal!bool.Signal.emit()` is not callable using argument types `(bool)`
+            onSettingsChanged.emit(_enableAICheck.checked);
+                                  ^
+src/dlangide/ui/aimerger.d(629,35):        expected 0 argument(s), not 1
+src/dlangide/ui/dcore_integration.d(124,31): Error: no property `vaultManager` for `this._dcoreInstance` of type `dcore.core.DCore`
+            if (_dcoreInstance.vaultManager())
+                              ^
+src/dcore/core.d(43,1):        class `DCore` defined here
+class DCore {
+^
+src/dlangide/ui/diff_integration_example.d(89,57): Error: `EditorActions` matches conflicting symbols:
+        _compareFielsMenuItem = new MenuItem(new Action(EditorActions.CompareFiles,
+                                                        ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/widgets/editors.d(80,1):        enum `dlangui.widgets.editors.EditorActions`
+enum EditorActions : int {
+^
+src/dlangide/ui/diffmanager.d(497,1):        class `dlangide.ui.diffmanager.EditorActions`
+class EditorActions {
+^
+src/dlangide/ui/diff_integration_example.d(89,57): Error: no property `CompareFiles` for type `EditorActions`
+        _compareFielsMenuItem = new MenuItem(new Action(EditorActions.CompareFiles,
+                                                        ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/widgets/editors.d(80,1):        enum `EditorActions` defined here
+enum EditorActions : int {
+^
+src/dlangide/ui/diff_integration_example.d(90,55): Error: no property `Ctrl` for type `KeyFlag`
+            "Compare Files..."d, "document-compare"d, KeyFlag.Ctrl, KeyCode.KEY_D, KeyFlag.Alt));
+                                                      ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/core/events.d(990,1):        enum `KeyFlag` defined here
+enum KeyFlag : uint {
+^
+src/dlangide/ui/diff_integration_example.d(97,59): Error: `EditorActions` matches conflicting symbols:
+        _showDiffMergerMenuItem = new MenuItem(new Action(EditorActions.ShowDiffMerger,
+                                                          ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/widgets/editors.d(80,1):        enum `dlangui.widgets.editors.EditorActions`
+enum EditorActions : int {
+^
+src/dlangide/ui/diffmanager.d(497,1):        class `dlangide.ui.diffmanager.EditorActions`
+class EditorActions {
+^
+src/dlangide/ui/diff_integration_example.d(97,59): Error: no property `ShowDiffMerger` for type `EditorActions`
+        _showDiffMergerMenuItem = new MenuItem(new Action(EditorActions.ShowDiffMerger,
+                                                          ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/widgets/editors.d(80,1):        enum `EditorActions` defined here
+enum EditorActions : int {
+^
+src/dlangide/ui/diff_integration_example.d(98,50): Error: no property `Ctrl` for type `KeyFlag`
+            "Show Diff Merger"d, "diff-merger"d, KeyFlag.Ctrl, KeyCode.KEY_D, KeyFlag.Shift));
+                                                 ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/core/events.d(990,1):        enum `KeyFlag` defined here
+enum KeyFlag : uint {
+^
+src/dlangide/ui/diff_integration_example.d(105,61): Error: `EditorActions` matches conflicting symbols:
+        _resolveConflictsMenuItem = new MenuItem(new Action(EditorActions.ResolveConflicts,
+                                                            ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/widgets/editors.d(80,1):        enum `dlangui.widgets.editors.EditorActions`
+enum EditorActions : int {
+^
+src/dlangide/ui/diffmanager.d(497,1):        class `dlangide.ui.diffmanager.EditorActions`
+class EditorActions {
+^
+src/dlangide/ui/diff_integration_example.d(105,61): Error: no property `ResolveConflicts` for type `EditorActions`
+        _resolveConflictsMenuItem = new MenuItem(new Action(EditorActions.ResolveConflicts,
+                                                            ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/widgets/editors.d(80,1):        enum `EditorActions` defined here
+enum EditorActions : int {
+^
+src/dlangide/ui/diff_integration_example.d(106,61): Error: no property `Ctrl` for type `KeyFlag`
+            "Resolve Merge Conflicts"d, "merge-conflicts"d, KeyFlag.Ctrl, KeyCode.KEY_R, KeyFlag.Shift));
+                                                            ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/core/events.d(990,1):        enum `KeyFlag` defined here
+enum KeyFlag : uint {
+^
+src/dlangide/ui/diff_integration_example.d(113,58): Error: `EditorActions` matches conflicting symbols:
+        _aiSuggestionsMenuItem = new MenuItem(new Action(EditorActions.ShowAIChanges,
+                                                         ^
+../../../.dub/packages/dlangui/0.10.8/dlangui/src/dlangui/widgets/editors.d(80,1):        enum `dlangui.widgets.editors.EditorActions`
+enum EditorActions : int {
+^
+src/dlangide/ui/diffmanager.d(497,1):        class `dlangide.ui.diffmanager.EditorActions`
+class EditorActions {
+^
+src/dlangide/ui/diff_integration_example.d(113,58): Error: no property `ShowAIChanges` for type `EditorActions`
+        _aiSuggestionsMenuItem = new MenuItem(new Action(EditorActions.ShowAIChanges,
+                                                         ^
+error limit (20) reached, use `-verrors=0` to show all
+Error /usr/bin/dmd failed with exit code 1.
