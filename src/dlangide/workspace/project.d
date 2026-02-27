@@ -1074,9 +1074,8 @@ class Project : WorkspaceItem
             }
             if (_isDependency)
             {
-                _name ~= "-"d;
-                _name ~= toUTF32(_dependencyVersion.startsWith("~") ? _dependencyVersion[1 .. $]
-                        : _dependencyVersion);
+                dstring versionStr = toUTF32(_dependencyVersion.startsWith("~") ? _dependencyVersion[1 .. $] : _dependencyVersion);
+                _name = _name ~ "-"d ~ versionStr;
             }
             _description = toUTF32(_projectFile.setting.getString("description"));
             Log.d("  project name: ", _name);
@@ -1091,19 +1090,27 @@ class Project : WorkspaceItem
 
             Log.i("Project source paths: ", sourcePaths);
             //Log.i("Builder source paths: ", builderSourcePaths(_settings));
+            Log.i("About to call loadSelections...");
             if (!_isDependency)
                 loadSelections();
+            Log.i("loadSelections completed");
 
             _configurations = ProjectConfiguration.load(_projectFile.setting);
             Log.i("Project configurations: ", _configurations);
-
         }
         catch (Exception e)
         {
             Log.e("Cannot read project file", e);
             return false;
         }
-        _items.loadFile(filename);
+        Log.i("About to call _items.loadFile with filename: ", filename);
+        Log.i("_items is null? ", _items is null);
+        if (_items)
+            Log.i("_items._filename: ", _items.filename);
+        // Don't load the project file as a source file - _items represents the project folder
+        // and filename is the project file (dub.json), not a source file within the project
+        Log.i("Skipping _items.loadFile(filename) - project file should not be loaded as source file");
+        Log.i("processLoadedProject completed successfully");
         return true;
     }
 
@@ -1114,13 +1121,42 @@ class Project : WorkspaceItem
         if (fname.length > 0)
             filename = fname;
 
-        if (!_projectFile.load(_filename))
+        // If _filename is a directory, look for a package file inside it
+        string fileToLoad = _filename;
+        if (_filename.exists && _filename.isDir)
         {
-            Log.e("failed to load project from file ", _filename);
+            string packageFile = DubPackageFinder.findPackageFile(_filename);
+            if (packageFile)
+            {
+                fileToLoad = packageFile;
+                Log.d("Found package file in directory: ", packageFile);
+                // Update filename to the package file path (this also updates _dir)
+                filename = packageFile;
+            }
+            else
+            {
+                // No package file - treat as generic directory project
+                Log.i("No package file found, opening as generic directory project: ", _filename);
+                _name = toUTF32(baseName(_filename));
+                _originalName = _name;
+                _items = new ProjectFolder(_filename);
+                _items.project = this;
+                _items.loadItems();  // Scan directory contents
+                return true;
+            }
+        }
+
+        if (!_projectFile.load(fileToLoad))
+        {
+            Log.e("failed to load project from file ", fileToLoad);
             return false;
         }
-        Log.d("Reading project from file ", _filename);
-        return processLoadedProject();
+        Log.d("Reading project from file ", fileToLoad);
+        bool result = processLoadedProject();
+        Log.i("processLoadedProject returned: ", result);
+        Log.i("Project.load() about to return result: ", result);
+        Log.i("Project.load() returning successfully");
+        return result;
     }
 
     override bool save(string fname = null)
@@ -1153,9 +1189,14 @@ class Project : WorkspaceItem
     {
         Project[] newdeps;
         _dependencies.length = 0;
+        Log.i("loadSelections: creating DubPackageFinder...");
         auto finder = new DubPackageFinder;
-        scope (exit)
+        Log.i("loadSelections: DubPackageFinder created");
+        scope (exit) {
+            Log.i("loadSelections: scope(exit) - about to destroy finder...");
             destroy(finder);
+            Log.i("loadSelections: scope(exit) - finder destroyed");
+        }
         SettingsFile selectionsFile = new SettingsFile(buildNormalizedPath(_dir, "dub.selections.json"));
         if (!selectionsFile.load())
         {
@@ -1197,6 +1238,7 @@ class Project : WorkspaceItem
             }
         }
         _dependencies = newdeps;
+        Log.i("loadSelections: about to return true");
         return true;
     }
 }

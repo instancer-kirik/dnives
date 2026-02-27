@@ -30,6 +30,7 @@ import dlangide.ui.settings;
 import dlangide.ui.debuggerui;
 import dlangide.ui.dialogs.projectdirdialog;
 import dlangide.ui.dcore_integration;
+import dcore.widgets.filesystembrowser;
 
 import dlangide.workspace.workspace;
 import dlangide.workspace.project;
@@ -558,6 +559,11 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
                 _tabs.addTab(wrapper, toUTF32(baseName(filename)), null, true, filename.toUTF32);
                 index = _tabs.tabIndex(filename);
                 TabItem tab = _tabs.tab(filename);
+                if (tab is null)
+                {
+                    Log.e("ERROR: tab is null for filename: ", filename);
+                    return false;
+                }
                 tab.objectParam = file;
                 //editor.modifiedStateChange = &onModifiedStateChange; // EditorWithHeader already handles its own modified state for the header, but frame might still need it
                 editor.modifiedStateChange = (Widget source, bool modified) {
@@ -2349,23 +2355,35 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
 
     private bool loadProject(Project project)
     {
-        if (!project.load())
+        Log.i("loadProject: ENTERED FUNCTION");
+        Log.i("loadProject: calling project.load()...");
+        bool loadResult = project.load();
+        Log.i("loadProject: project.load() returned: ", loadResult);
+        Log.i("loadProject: CONTROL RETURNED FROM project.load()");
+        if (!loadResult)
         {
             _logPanel.logLine("Cannot read project " ~ project.filename);
             window.showMessageBox(UIString.fromId("ERROR_OPEN_PROJECT"c).value, UIString.fromId(
                     "ERROR_OPENING_PROJECT"c).value ~ toUTF32(project.filename));
             return false;
         }
+        Log.i("loadProject: project loaded successfully");
         const auto msg = UIString.fromId("MSG_OPENED_PROJECT"c);
         _logPanel.logLine(toUTF32("Project file " ~ project.filename ~ " is opened ok"));
-
+        Log.i("loadProject: about to call warmUpImportPaths...");
         warmUpImportPaths(project);
+        Log.i("loadProject: warmUpImportPaths completed");
         return true;
     }
 
     public void warmUpImportPaths(Project project)
     {
-        dcdInterface.warmUp(project.importPaths(_settings));
+        Log.i("warmUpImportPaths: getting import paths...");
+        auto paths = project.importPaths(_settings);
+        Log.i("warmUpImportPaths: import paths count: ", paths.length);
+        Log.i("warmUpImportPaths: calling dcdInterface.warmUp...");
+        dcdInterface.warmUp(paths);
+        Log.i("warmUpImportPaths: dcdInterface.warmUp completed");
     }
 
     void restoreListOfOpenedFiles()
@@ -2730,6 +2748,19 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
             _wsPanel.activate();
             _settings.updateRecentWorkspace(ws.filename);
             _settings.setRecentPath(ws.dir, "FILE_OPEN_WORKSPACE_PATH");
+
+            // Update Explorer panel to show project directory
+            auto explorerDock = _dockHost.childById!DockWindow("EXPLORER");
+            if (explorerDock && explorerDock.bodyWidget)
+            {
+                import dcore.widgets.filesystembrowser;
+                auto browser = cast(FileSystemBrowser)explorerDock.bodyWidget;
+                if (browser && ws.dir.length > 0)
+                {
+                    browser.setRootPath(ws.dir);
+                }
+            }
+
             if (ws.startupProject)
             {
                 warmUpImportPaths(ws.startupProject);

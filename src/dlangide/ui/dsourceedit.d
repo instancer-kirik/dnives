@@ -768,13 +768,16 @@ class EditorHeader : HorizontalLayout {
 
     this(string filename) {
         super("editor_header");
-        styleId = "TOOL_BAR";
+        styleId = "TOOLBAR_HOST";
         layoutWidth = FILL_PARENT;
         layoutHeight = WRAP_CONTENT;
         padding(Rect(5, 2, 5, 2));
         
+        // Handle null/empty filename gracefully
+        string safeFilename = filename ? filename : "untitled";
+        
         // Path breadcrumbs
-        _pathText = new TextWidget("path_text", dirName(filename).toUTF32);
+        _pathText = new TextWidget("path_text", dirName(safeFilename).toUTF32);
         _pathText.textColor = 0x808080;
         _pathText.fontSize = 10.pointsToPixels;
         addChild(_pathText);
@@ -782,7 +785,7 @@ class EditorHeader : HorizontalLayout {
         addChild(new TextWidget(null, " / "d));
 
         // Filename
-        _filenameText = new TextWidget("filename_text", baseName(filename).toUTF32);
+        _filenameText = new TextWidget("filename_text", baseName(safeFilename).toUTF32);
         _filenameText.fontWeight = FontWeight.Bold;
         _filenameText.fontSize = 11.pointsToPixels;
         addChild(_filenameText);
@@ -811,7 +814,8 @@ class EditorWithHeader : VerticalLayout {
     alias setFocus = Widget.setFocus;
     
     this(string filename) {
-        super(filename ~ "_wrapper");
+        string safeFilename = filename ? filename : "untitled";
+        super(safeFilename ~ "_wrapper");
         layoutWidth = FILL_PARENT;
         layoutHeight = FILL_PARENT;
         _header = new EditorHeader(filename);

@@ -1,0 +1,9 @@
+{
+    "name": "dnives",
+    "description": "Multi-language IDE with advanced code intelligence and AI integration",
+    "projects": {
+        "dnives": "dub.json"
+    },
+    "includePath": {
+    }
+}

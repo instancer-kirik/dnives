@@ -80,8 +80,16 @@ class ProjectDirectoryDialog : FileDialog {
             
             string dirToUse = "";
             
-            // Try to use manual filename entry if it's a directory
-            if (baseFilename.length > 0) {
+            // Try explicit user selection FIRST
+            if (_userSelectedDir.length > 0) {
+                if (exists(_userSelectedDir) && isDir(_userSelectedDir)) {
+                    dirToUse = _userSelectedDir;
+                    Log.i("PROJECTDIRDIALOG: Using explicitly selected directory: ", dirToUse);
+                }
+            }
+            
+            // Only check manual entry if no explicit selection
+            if (dirToUse.length == 0 && baseFilename.length > 0) {
                 string fullPath;
                 // Check if it's an absolute path
                 if (isAbsolute(baseFilename)) {
@@ -95,15 +103,6 @@ class ProjectDirectoryDialog : FileDialog {
                 if (exists(fullPath) && isDir(fullPath)) {
                     dirToUse = fullPath;
                     Log.i("PROJECTDIRDIALOG: Using manually entered directory: ", dirToUse);
-                }
-            }
-            
-            // Use explicitly selected directory from navigation or list
-            if (dirToUse.length == 0 && _userSelectedDir.length > 0) {
-                // Verify it's a valid directory
-                if (exists(_userSelectedDir) && isDir(_userSelectedDir)) {
-                    dirToUse = _userSelectedDir;
-                    Log.i("PROJECTDIRDIALOG: Using explicitly selected directory: ", dirToUse);
                 }
             }
             

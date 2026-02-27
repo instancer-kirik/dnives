@@ -1,0 +1,24 @@
+{
+    "startupProject": "dnives",
+    "breakpoints": [
+    ],
+    "bookmarks": [
+    ],
+    "files": [
+        {
+            "file": "/home/bon/Code/_D/dnives/src/app.d",
+            "column": 0,
+            "row": 0
+        }
+    ],
+    "expandedItems": [
+        "/home/bon/Code/_D/dnives/src/dlangide/tools/d",
+        "/home/bon/Code/_D/dnives/src",
+        "/home/bon/Code/_D/dnives/src/dlangide/tools",
+        "/home/bon/Code/_D/dnives/src/dcore/code",
+        "/home/bon/Code/_D/dnives/source",
+        "/home/bon/Code/_D/dnives/dub.json",
+        "/home/bon/Code/_D/dnives/src/dcore"
+    ],
+    "selectedWorkspaceItem": "/home/bon/Code/_D/dnives/src/dcore/code/symbol_tracker.d"
+}
