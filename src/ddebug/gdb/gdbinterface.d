@@ -134,9 +134,9 @@ class GDBInterface : ConsoleDebuggerInterface, TextCommandTarget {
             string[] args = [
                 _terminalExecutable,
                 "-title",
-                "DLangIDE External Console",
+                "Dnives External Console",
                 "-e",
-                "echo 'DlangIDE External Console' && tty > " ~ termfile ~ " && sleep 1000000"
+                "echo 'Dnives External Console' && tty > " ~ termfile ~ " && sleep 1000000"
             ];
             Log.d("Terminal command line: ", args);
             terminalPid = spawnProcess(args);
@@ -396,7 +396,7 @@ class GDBInterface : ConsoleDebuggerInterface, TextCommandTarget {
                 buf ~= "\\r";
             else if (ch == '\\')
                 buf ~= "\\\\";
-            else 
+            else
                 buf ~= ch;
         }
         if (hasSpaces)
@@ -406,7 +406,7 @@ class GDBInterface : ConsoleDebuggerInterface, TextCommandTarget {
 
     class AddBreakpointRequest : GDBRequest {
         GDBBreakpoint gdbbp;
-        this(Breakpoint bp) { 
+        this(Breakpoint bp) {
             gdbbp = new GDBBreakpoint();
             gdbbp.bp = bp;
             char[] cmd;
@@ -416,7 +416,7 @@ class GDBInterface : ConsoleDebuggerInterface, TextCommandTarget {
             cmd ~= quotePathIfNeeded(bp.fullFilePath);
             cmd ~= ":";
             cmd ~= to!string(bp.line);
-            command = cmd.dup; 
+            command = cmd.dup;
             _breakpoints ~= gdbbp;
         }
 
@@ -641,8 +641,8 @@ class GDBInterface : ConsoleDebuggerInterface, TextCommandTarget {
     private int finishedInitRequests = 0;
     class GDBInitRequest : GDBRequest {
         bool _mandatory;
-        this(string cmd, bool mandatory) { 
-            command = cmd; 
+        this(string cmd, bool mandatory) {
+            command = cmd;
             _mandatory = mandatory;
             totalInitRequests++;
         }
@@ -652,7 +652,7 @@ class GDBInterface : ConsoleDebuggerInterface, TextCommandTarget {
             finishedInitRequests++;
             checkFinished();
         }
-        
+
         override void onResult() {
             initRequestsSuccessful++;
             finishedInitRequests++;
@@ -699,7 +699,7 @@ class GDBInterface : ConsoleDebuggerInterface, TextCommandTarget {
         submitRequest(new GDBInitRequest("-environment-cd " ~ quotePathIfNeeded(_executableWorkingDir), true));
         if (externalTerminalTty)
             submitRequest(new GDBInitRequest("-inferior-tty-set " ~ quotePathIfNeeded(externalTerminalTty), true));
-        
+
         submitRequest(new GDBInitRequest("-gdb-set breakpoint pending on", false));
         //submitRequest(new GDBInitRequest("-enable-pretty-printing", false));
         submitRequest(new GDBInitRequest("-gdb-set print object on", false));
@@ -713,7 +713,7 @@ class GDBInterface : ConsoleDebuggerInterface, TextCommandTarget {
         if (_executableArgs.length) {
             char[] buf;
             for(uint i = 0; i < _executableArgs.length; i++) {
-                if (i > 0) 
+                if (i > 0)
                     buf ~= " ";
                 buf ~= quotePathIfNeeded(_executableArgs[i]);
             }
@@ -755,7 +755,7 @@ class GDBInterface : ConsoleDebuggerInterface, TextCommandTarget {
             _frameId = frameId;
             if (!_threadId)
                 _threadId = _currentState ? _currentState.currentThreadId : 0;
-            command = "-stack-list-frames --thread " ~ to!string(_threadId); 
+            command = "-stack-list-frames --thread " ~ to!string(_threadId);
         }
         override void onResult() {
             DebugStack stack = parseStack(params);
@@ -779,8 +779,8 @@ class GDBInterface : ConsoleDebuggerInterface, TextCommandTarget {
         this(ulong threadId, int frameId) {
             _threadId = threadId;
             _frameId = frameId;
-            //command = "-stack-list-variables --thread " ~ to!string(_threadId) ~ " --frame " ~ to!string(_frameId) ~ " --simple-values"; 
-            command = "-stack-list-locals --thread " ~ to!string(_threadId) ~ " --frame " ~ to!string(_frameId) ~ " 1"; 
+            //command = "-stack-list-variables --thread " ~ to!string(_threadId) ~ " --frame " ~ to!string(_frameId) ~ " --simple-values";
+            command = "-stack-list-locals --thread " ~ to!string(_threadId) ~ " --frame " ~ to!string(_frameId) ~ " 1";
         }
         override void onResult() {
             DebugVariableList variables = parseVariableList(params, "locals");

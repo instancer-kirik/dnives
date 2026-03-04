@@ -45,10 +45,17 @@
     <style id="HOME_SCREEN_TITLE"
         textColor="#2020FF"
     />
-  
+
     <style id="HOME_SCREEN_TITLE2"
         textColor="#2020FF"
     />
 
-</theme>
+    <style id="HOME_SCREEN_SECTION"
+        textColor="#00CCCC"
+    />
 
+    <style id="HOME_SCREEN_HINT"
+        textColor="#606060"
+    />
+
+</theme>

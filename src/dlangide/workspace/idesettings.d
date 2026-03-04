@@ -24,10 +24,10 @@ class IDESettings : SettingsFile {
         ed.setBooleanDef("showWhiteSpaceMarks", true);
         ed.setBooleanDef("showTabPositionMarks", true);
         ed.setBooleanDef("autoAutoComplete", true);
-        ed.setStringDef("fontFace", "Default");
+        ed.setStringDef("fontFace", "JetBrains Mono,Fira Code,DejaVu Sans Mono,Courier New");
         ed.setIntegerDef("fontSize", 11);
         Setting ui = uiSettings();
-        ui.setStringDef("theme", "ide_theme_default");
+        ui.setStringDef("theme", "ide_theme_dark");
         ui.setStringDef("language", "en");
         ui.setIntegerDef("hintingMode", 1);
         ui.setIntegerDef("minAntialiasedFontSize", 0);
@@ -344,4 +344,3 @@ class IDESettings : SettingsFile {
         return _setting.objectByPath("uiState", true);
     }
 }
-

@@ -1,42 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
 <theme id="ide_theme_default" parent="theme_default"
-        fontFace="Verdana,Arial,DejaVu Sans"
+        fontFace="Segoe UI,Ubuntu,Cantarell,Verdana,Arial,DejaVu Sans"
         fontFamily="SansSerif"
 	>
     <color id="edit_background" value="#FFFFFF"/>
-    <color id="link_color" value="#2020FF"/>
-    <color id="syntax_highlight_comment" value="#008000"/>
-    <color id="syntax_highlight_keyword" value="#0000FF"/>
-    <color id="syntax_highlight_string" value="#a31515"/>
-    <color id="syntax_highlight_character" value="#a31515"/>
-    <color id="syntax_highlight_error" value="#FF0000"/>
-    <color id="syntax_highlight_comment_documentation" value="#206000"/>
-    <color id="syntax_highlight_integer" value="#000000"/>
-    <color id="syntax_highlight_float" value="#000000"/>
-    <color id="syntax_highlight_ident" value="#000000"/>
+    <color id="link_color" value="#1D6FBF"/>
+    <color id="syntax_highlight_comment" value="#5A8A5A"/>
+    <color id="syntax_highlight_keyword" value="#1D5FAF"/>
+    <color id="syntax_highlight_string" value="#A31515"/>
+    <color id="syntax_highlight_character" value="#A31515"/>
+    <color id="syntax_highlight_error" value="#D01040"/>
+    <color id="syntax_highlight_comment_documentation" value="#3A6E3A"/>
+    <color id="syntax_highlight_integer" value="#096F6F"/>
+    <color id="syntax_highlight_float" value="#096F6F"/>
+    <color id="syntax_highlight_ident" value="#1A1A1A"/>
 
-    <color id="build_log_filename_color" value="#0000C0"/>
-    <color id="build_log_error_color" value="#FF0000"/>
-    <color id="build_log_warning_color" value="#606000"/>
-    <color id="build_log_deprecation_color" value="#802040"/>
+    <color id="build_log_filename_color" value="#1D5FAF"/>
+    <color id="build_log_error_color" value="#C0392B"/>
+    <color id="build_log_warning_color" value="#8A6000"/>
+    <color id="build_log_deprecation_color" value="#7B3050"/>
 
     <drawable id="btn_check" value="btn_check"/>
+
     <style id="TERMINAL" parent="EDIT_BOX_NO_FRAME"
     />
 
     <style id="TOOLBAR_HOST"
-        backgroundImageId="#eceffa"
+        backgroundImageId="#F0F4FF"
     />
 
     <style id="HOME_SCREEN_TITLE"
-        textColor="#2040FF"
+        textColor="#1D5FAF"
         fontSize="160%"
     />
-  
+
     <style id="HOME_SCREEN_TITLE2"
-        textColor="#2040FF"
+        textColor="#5A728A"
         fontSize="120%"
     />
 
-</theme>
+    <style id="HOME_SCREEN_SECTION"
+        textColor="#1D5FAF"
+        fontSize="110%"
+    />
 
+    <style id="HOME_SCREEN_HINT"
+        textColor="#8A9AAA"
+        fontSize="95%"
+    />
+
+</theme>

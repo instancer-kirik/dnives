@@ -7,8 +7,17 @@
     <style id="HOME_SCREEN_TITLE"
         textColor="#60A0FF"
     />
-  
+
     <style id="HOME_SCREEN_TITLE2"
-        textColor="#60A0FF"
+        textColor="#A0A0C0"
     />
+
+    <style id="HOME_SCREEN_SECTION"
+        textColor="#00FFCC"
+    />
+
+    <style id="HOME_SCREEN_HINT"
+        textColor="#606080"
+    />
+
 </theme>

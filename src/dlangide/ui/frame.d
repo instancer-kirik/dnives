@@ -120,7 +120,7 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
     IDESettings _settings;
     ProgramExecution _execution;
 
-    dstring frameWindowCaptionSuffix = "DLangIDE"d;
+    dstring frameWindowCaptionSuffix = "Dnives"d;
 
     this(Window window)
     {
@@ -2760,6 +2760,7 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
                     browser.setRootPath(ws.dir);
                 }
             }
+
 
             if (ws.startupProject)
             {

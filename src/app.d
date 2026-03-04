@@ -85,14 +85,18 @@ extern (C) int UIAppMain(string[] args)
     // embed non-standard resources listed in views/resources.list into executable
     embeddedResourceList.addResources(embedResourcesFromList!("resources.list")());
 
-    Platform.instance.uiTheme = "ide_theme_default";
+    Platform.instance.uiTheme = "ide_theme_dark";
 
-    // Font configuration
-    FontManager.hintingMode = HintingMode.Normal;
+    // Font configuration — tuned for crisp, modern rendering across platforms.
+    // AutoHint produces sharper glyphs on modern screens vs. Normal (bytecode) hinting.
+    FontManager.hintingMode = HintingMode.AutoHint;
+    // Always enable antialiasing (0 = no minimum size threshold).
     FontManager.minAnitialiasedFontSize = 0;
-    FontManager.fontGamma = 1.0;
+    // Gamma 0.9: perceptually lighter strokes that feel crisper at typical DPI.
+    FontManager.fontGamma = 0.9;
     version (NO_OPENGL)
     {
+        // BGR subpixel rendering for LCD panels when running without OpenGL.
         FontManager.subpixelRenderingMode = SubpixelRenderingMode.BGR;
     }
     else
@@ -109,7 +113,8 @@ extern (C) int UIAppMain(string[] args)
     {
         version (USE_FREETYPE)
         {
-            FontManager.fontGamma = 0.8;
+            // Slightly softer gamma than pure black-on-white but still sharp.
+            FontManager.fontGamma = 0.85;
             FontManager.hintingMode = HintingMode.AutoHint;
         }
     }

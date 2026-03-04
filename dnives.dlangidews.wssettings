@@ -18,7 +18,8 @@
         "/home/bon/Code/_D/dnives/src/dcore/code",
         "/home/bon/Code/_D/dnives/source",
         "/home/bon/Code/_D/dnives/dub.json",
-        "/home/bon/Code/_D/dnives/src/dcore"
+        "/home/bon/Code/_D/dnives/src/dcore",
+        "/home/bon/Code/_D/dnives/src/dcore/ai"
     ],
-    "selectedWorkspaceItem": "/home/bon/Code/_D/dnives/src/dcore/code/symbol_tracker.d"
+    "selectedWorkspaceItem": "/home/bon/Code/_D/dnives/src/dcore/ai/ai_backend.d"
 }
