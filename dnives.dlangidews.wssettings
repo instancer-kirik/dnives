@@ -9,17 +9,22 @@
             "file": "/home/bon/Code/_D/dnives/src/app.d",
             "column": 0,
             "row": 0
+        },
+        {
+            "file": "/home/bon/Code/_D/dnives/src/app.d",
+            "column": 0,
+            "row": 0
         }
     ],
     "expandedItems": [
         "/home/bon/Code/_D/dnives/src/dlangide/tools/d",
         "/home/bon/Code/_D/dnives/src",
+        "/home/bon/Code/_D/dnives/src/dcore/compat",
         "/home/bon/Code/_D/dnives/src/dlangide/tools",
+        "/home/bon/Code/_D/dnives/src/dcore/common",
         "/home/bon/Code/_D/dnives/src/dcore/code",
         "/home/bon/Code/_D/dnives/source",
-        "/home/bon/Code/_D/dnives/dub.json",
-        "/home/bon/Code/_D/dnives/src/dcore",
-        "/home/bon/Code/_D/dnives/src/dcore/ai"
+        "/home/bon/Code/_D/dnives/dub.json"
     ],
-    "selectedWorkspaceItem": "/home/bon/Code/_D/dnives/src/dcore/ai/ai_backend.d"
+    "selectedWorkspaceItem": "/home/bon/Code/_D/dnives/src/dlangide/tools"
 }
