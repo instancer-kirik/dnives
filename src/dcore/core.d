@@ -1,4 +1,6 @@
 module dcore.core;
+// Note: MainWindow (dcore.ui.mainwindow) is the old/deprecated CompyutinatorCode
+// window. Do not import it here — setCCCoreReferences accepts plain Widget.
 
 import std.stdio;
 import std.string;
@@ -238,7 +240,18 @@ class DCore {
         _cccore = cccore;
 
         if (_aiIntegration !is null) {
-            _aiIntegration = new AIIntegration(this, cccore, cast(MainWindow)mainWindow);
+            // Update references on the existing instance — do NOT create a second
+            // AIIntegration object, which would orphan the already-initialised one
+            // and cause duplicate AIManager / ContextManager / ChatWidget instances.
+            // updateReferences() accepts plain Widget; it casts internally where needed.
+            _aiIntegration.updateReferences(cccore, mainWindow);
+
+            // Wire the integration instance into MainWindow if the host happens
+            // to still be the old MainWindow type (no-op for IDEFrame).
+            import dcore.ui.mainwindow : MainWindow;
+            if (auto mw = cast(MainWindow)mainWindow) {
+                mw.setAIIntegration(_aiIntegration);
+            }
         }
 
         if (_notebookIntegration !is null && mainWindow !is null) {

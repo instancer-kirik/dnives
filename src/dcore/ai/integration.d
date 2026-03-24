@@ -10,15 +10,22 @@ import std.json;
 import std.datetime;
 import std.exception;
 import std.conv;
+import dlangui;
 import dlangui.core.logger;
 import dlangui.widgets.docks;
 import dlangui.widgets.widget;
 import dlangui.widgets.menu;
+import dlangui.dialogs.filedlg;
+import dlangui.dialogs.dialog;
+import dlangui.core.types;
 import dlangui.core.events;
 
 import dcore.core;
 import dcore.components.cccore;
-import dcore.ui.mainwindow;
+// MainWindow is the old/deprecated CompyutinatorCode window.
+// Keep the import only for the dynamic-cast guard in integrateWithMainWindow()
+// and setupKeyboardShortcuts(); the field type is now plain Widget.
+import dcore.ui.mainwindow : MainWindow;
 import dcore.lsp.lspmanager;
 import dcore.ai.ai_manager;
 import dcore.ai.ai_backend;
@@ -41,7 +48,9 @@ import dcore.code.symbol_tracker;
 class AIIntegration {
     private DCore _core;
     private CCCore _ccCore;
-    private MainWindow _mainWindow;
+    // Stored as Widget so IDEFrame (and any other AppFrame subclass) can be
+    // passed without depending on the deprecated MainWindow type.
+    private Widget _mainWindow;
     private LSPManager _lspManager;
 
     // AI system components
@@ -55,13 +64,34 @@ class AIIntegration {
     /**
      * Constructor
      */
-    this(DCore core, CCCore ccCore, MainWindow mainWindow) {
+    this(DCore core, CCCore ccCore, Widget mainWindow) {
         _core = core;
         _ccCore = ccCore;
         _mainWindow = mainWindow;
 
         Log.i("AIIntegration: Initialized");
     }
+
+    /**
+     * Update CCCore and MainWindow references after construction.
+     * Use this instead of creating a second instance when references become available.
+     */
+    void updateReferences(CCCore ccCore, Widget mainWindow) {
+        _ccCore = ccCore;
+        _mainWindow = mainWindow;
+
+        // If already initialised, re-run the window integration steps
+        // so shortcuts and file-open callbacks are wired to the real window.
+        if (_isInitialized) {
+            integrateWithMainWindow();
+            setupKeyboardShortcuts();
+        }
+
+        Log.i("AIIntegration: References updated");
+    }
+
+    /** Returns true once initialize() has completed successfully. */
+    bool isInitialized() const { return _isInitialized; }
 
     /**
      * Initialize AI integration
@@ -111,32 +141,77 @@ class AIIntegration {
      * Create and show the AI chat dock
      */
     void createAIChatDock() {
-        if (!_isInitialized || !_mainWindow || _aiChatDock) {
+        if (!_isInitialized || !_mainWindow || _aiChatDock)
+            return;
+
+        // dockHost is a MainWindow-specific property; no-op for IDEFrame
+        // (IDEFrame calls createAIChatDockInHost directly with its own DockHost).
+        auto mw = cast(MainWindow)_mainWindow;
+        if (!mw) {
+            Log.w("AIIntegration: createAIChatDock — host is not a MainWindow, use createAIChatDockInHost instead");
             return;
         }
 
-        auto dockHost = _mainWindow.dockHost;
+        auto dockHost = mw.dockHost;
         if (!dockHost) {
             Log.e("AIIntegration: No dock host available");
             return;
         }
 
-        // Create the chat dock using AI manager
         _aiManager.createChatDock(dockHost);
+        _aiChatDock = _aiManager.chatDock;
 
         Log.i("AIIntegration: Created AI chat dock");
+    }
+
+    /**
+     * Create and show the AI chat dock using an externally provided DockHost.
+     * Use this when MainWindow is not available (e.g. from IDEFrame).
+     */
+    void createAIChatDockInHost(DockHost dockHost) {
+        if (!_isInitialized || !dockHost)
+            return;
+
+        // Already created — delegate visibility to manager
+        if (_aiChatDock) {
+            _aiManager.toggleChatPanel();
+            return;
+        }
+
+        _aiManager.createChatDock(dockHost);
+
+        // Capture the dock window the manager just created so our guard works
+        _aiChatDock = _aiManager.chatDock;
+
+        Log.i("AIIntegration: Created AI chat dock in external host");
+    }
+
+    /**
+     * Ensure AI is initialized, then create/show chat dock in the given host.
+     * Safe to call multiple times — idempotent.
+     */
+    void ensureOpenInHost(DockHost dockHost) {
+        if (!_isInitialized) {
+            Log.w("AIIntegration: Not initialized, cannot open chat");
+            return;
+        }
+        createAIChatDockInHost(dockHost);
     }
 
     /**
      * Toggle AI chat panel visibility
      */
     void toggleAIChat() {
-        if (!_isInitialized) {
+        if (!_isInitialized)
             return;
-        }
+
+        // Sync _aiChatDock from manager in case it was created via ensureOpenInHost
+        if (!_aiChatDock)
+            _aiChatDock = _aiManager.chatDock;
 
         if (!_aiChatDock) {
             createAIChatDock();
+            _aiChatDock = _aiManager.chatDock;
         }
 
         _aiManager.toggleChatPanel();
@@ -303,20 +378,23 @@ class AIIntegration {
             return;
         }
 
-        // Set up window events
-        _mainWindow.onFileOpened = delegate(string filePath) {
-            // Notify AI system about new file
-            if (_aiManager) {
-                auto symbolTracker = _aiManager.getSymbolTracker();
-                if (symbolTracker) {
-                    symbolTracker.addFileToWatch(filePath);
+        // onFileOpened / onFileClosed are MainWindow-specific delegates.
+        // Guard with a dynamic cast so this is a no-op when the host is
+        // IDEFrame or any other Widget that doesn't carry those hooks.
+        if (auto mw = cast(MainWindow)_mainWindow) {
+            mw.onFileOpened = delegate(string filePath) {
+                if (_aiManager) {
+                    auto symbolTracker = _aiManager.getSymbolTracker();
+                    if (symbolTracker) {
+                        symbolTracker.addFileToWatch(filePath);
+                    }
                 }
-            }
-        };
+            };
 
-        _mainWindow.onFileClosed = delegate(string filePath) {
-            // Could remove from AI tracking if no longer needed
-        };
+            mw.onFileClosed = delegate(string filePath) {
+                // Could remove from AI tracking if no longer needed
+            };
+        }
     }
 
     /**
@@ -342,6 +420,7 @@ class AIIntegration {
         // Session management
         aiMenu.add(new MenuItem(new Action(ActionId.AI_ROLLBACK, "Rollback Changes"d, "Ctrl+Shift+Z")));
         aiMenu.add(new MenuItem(new Action(ActionId.AI_SESSIONS, "Manage Sessions..."d)));
+        aiMenu.add(new MenuItem(new Action(ActionId.AI_IMPORT_CHATGPT_EXPORT, "Import ChatGPT Export..."d)));
 
         aiMenu.addSeparator();
 
@@ -356,11 +435,14 @@ class AIIntegration {
      * Add AI menu items to main menu (deprecated - use createAIMenuItems instead)
      */
     private void addMenuItems() {
-        if (!_mainWindow) {
+        // getMainMenu() is MainWindow-specific; no-op for IDEFrame which builds
+        // its own menu in frame.d.
+        auto mw = cast(MainWindow)_mainWindow;
+        if (!mw) {
             return;
         }
 
-        auto mainMenu = _mainWindow.getMainMenu();
+        auto mainMenu = mw.getMainMenu();
         if (!mainMenu) {
             return;
         }
@@ -384,6 +466,7 @@ class AIIntegration {
         // Session management
         aiMenu.add(new MenuItem(new Action(ActionId.AI_ROLLBACK, "Rollback Changes"d, "Ctrl+Shift+Z")));
         aiMenu.add(new MenuItem(new Action(ActionId.AI_SESSIONS, "Manage Sessions..."d)));
+        aiMenu.add(new MenuItem(new Action(ActionId.AI_IMPORT_CHATGPT_EXPORT, "Import ChatGPT Export..."d)));
 
         aiMenu.addSeparator();
 
@@ -403,15 +486,19 @@ class AIIntegration {
             return;
         }
 
-        // Register keyboard shortcuts
-        _mainWindow.addKeyboardShortcut("F4", ActionId.AI_TOGGLE_CHAT);
-        _mainWindow.addKeyboardShortcut("Ctrl+Shift+N", ActionId.AI_NEW_CONVERSATION);
-        _mainWindow.addKeyboardShortcut("Ctrl+Shift+S", ActionId.AI_CODE_SUGGESTIONS);
-        _mainWindow.addKeyboardShortcut("Ctrl+Shift+A", ActionId.AI_ASK_SELECTION);
-        _mainWindow.addKeyboardShortcut("Ctrl+Shift+R", ActionId.AI_REFACTOR);
-        _mainWindow.addKeyboardShortcut("Ctrl+Shift+Z", ActionId.AI_ROLLBACK);
+        // addKeyboardShortcut is a MainWindow-specific API.
+        // IDEFrame registers its shortcuts via its own acceleratorMap / action
+        // handling, so this is a no-op for the current IDE host.
+        if (auto mw = cast(MainWindow)_mainWindow) {
+            mw.addKeyboardShortcut("F4", ActionId.AI_TOGGLE_CHAT);
+            mw.addKeyboardShortcut("Ctrl+Shift+N", ActionId.AI_NEW_CONVERSATION);
+            mw.addKeyboardShortcut("Ctrl+Shift+S", ActionId.AI_CODE_SUGGESTIONS);
+            mw.addKeyboardShortcut("Ctrl+Shift+A", ActionId.AI_ASK_SELECTION);
+            mw.addKeyboardShortcut("Ctrl+Shift+R", ActionId.AI_REFACTOR);
+            mw.addKeyboardShortcut("Ctrl+Shift+Z", ActionId.AI_ROLLBACK);
 
-        Log.i("AIIntegration: Setup keyboard shortcuts");
+            Log.i("AIIntegration: Setup keyboard shortcuts");
+        }
     }
 
     /**
@@ -456,6 +543,10 @@ class AIIntegration {
                 showSessionManager();
                 return true;
 
+            case ActionId.AI_IMPORT_CHATGPT_EXPORT:
+                importChatGPTExport();
+                return true;
+
             case ActionId.AI_SETTINGS:
                 showAISettings();
                 return true;
@@ -471,6 +562,44 @@ class AIIntegration {
     private void showSessionManager() {
         // Would create and show session management dialog
         Log.i("AIIntegration: Would show session manager");
+    }
+
+    /**
+     * Import ChatGPT export file into chat threads
+     */
+    private void importChatGPTExport() {
+        if (!_aiManager) {
+            Log.w("AIIntegration: AI manager not initialized");
+            return;
+        }
+
+        auto chatWidget = _aiManager.getChatWidget();
+        if (!chatWidget) {
+            Log.w("AIIntegration: Chat widget is not available");
+            return;
+        }
+
+        auto dlg = new FileDialog(UIString.fromRaw("Import ChatGPT Export"), _mainWindow.window);
+        dlg.addFilter(FileFilterEntry(UIString.fromRaw("JSON Files (*.json)"), "*.json"));
+        dlg.addFilter(FileFilterEntry(UIString.fromRaw("All Files (*)"), "*"));
+
+        dlg.dialogResult = delegate(Dialog sender, const Action result) {
+            if (result.id == ACTION_OPEN.id) {
+                string filename = result.stringParam;
+                if (filename.empty) {
+                    return;
+                }
+
+                try {
+                    chatWidget.importConversation(filename);
+                    Log.i("AIIntegration: Imported ChatGPT export from ", filename);
+                } catch (Exception e) {
+                    Log.e("AIIntegration: Failed importing ChatGPT export: ", e.msg);
+                }
+            }
+        };
+
+        dlg.show();
     }
 
     /**
@@ -592,5 +721,6 @@ enum ActionId {
     AI_REFACTOR = 9004,
     AI_ROLLBACK = 9005,
     AI_SESSIONS = 9006,
-    AI_SETTINGS = 9007
+    AI_SETTINGS = 9007,
+    AI_IMPORT_CHATGPT_EXPORT = 9008
 }

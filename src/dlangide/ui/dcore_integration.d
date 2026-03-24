@@ -3,12 +3,71 @@ module dlangide.ui.dcore_integration;
 import dlangui.core.logger;
 import dlangui.dialogs.dialog;
 import dlangui.widgets.widget;
+import dlangui.widgets.layouts;
+import dlangui.widgets.controls;
+import dlangui.widgets.popup;
 import dlangui.core.events;
 import dlangui.core.stdaction;
+import dlangui.core.types;
 
 // Import DCore components
 import dcore.core;
 import dcore.components.cccore;
+
+// ---------------------------------------------------------------------------
+// AutoCloseNotification — a non-modal timed popup that dismisses itself.
+// ---------------------------------------------------------------------------
+private class AutoCloseNotification : PopupWidget {
+    private long _timeoutMs;
+    private ulong _timerId;
+
+    this(dstring title, dstring message, long timeoutMs = 1240) {
+        auto content = new VerticalLayout("notif_content");
+        content.backgroundColor(0x252526);
+        content.padding(Rect(16, 12, 16, 12));
+        content.minWidth(340);
+
+        auto titleWidget = new TextWidget("notif_title", title);
+        titleWidget.fontSize(13);
+        titleWidget.fontWeight(700);
+        titleWidget.textColor(0xE8E8E8);
+        content.addChild(titleWidget);
+
+        auto gap = new Widget("notif_gap");
+        gap.minHeight(6);
+        content.addChild(gap);
+
+        auto msgWidget = new TextWidget("notif_msg", message);
+        msgWidget.fontSize(11);
+        msgWidget.textColor(0x9EAAB7);
+        content.addChild(msgWidget);
+
+        auto hint = new TextWidget("notif_hint", "auto-closing..."d);
+        hint.fontSize(10);
+        hint.textColor(0x505050);
+        content.addChild(hint);
+
+        super(content, null);
+        _timeoutMs = timeoutMs;
+    }
+
+    /**
+     * Arm the auto-close timer.  Call this immediately after
+     * window.showPopup(this) so the widget already has a window reference.
+     * dlangui 0.10.8: setTimer(intervalMillis) takes one arg and returns the id.
+     */
+    void armTimer() {
+        _timerId = setTimer(_timeoutMs);
+    }
+
+    override bool onTimer(ulong id) {
+        if (id == _timerId) {
+            close();
+            return false;
+        }
+        return super.onTimer(id);
+    }
+}
 
 /**
  * DCore Integration Manager - Minimal Proof of Concept
@@ -76,9 +135,11 @@ class DCoreIntegrationManager
 
         if (_mainWindow && _mainWindow.window)
         {
-            import std.utf : toUTF32;
-
-            _mainWindow.window.showMessageBox("DCore Integration"d, statusMessage.toUTF32);
+            auto notif = new AutoCloseNotification(
+                "DCore Integration"d,
+                "✅ Ready — config, vault & UI components active. See log for details."d);
+            _mainWindow.window.showPopup(notif);
+            notif.armTimer();
         }
         else
         {
@@ -138,7 +199,11 @@ class DCoreIntegrationManager
 
             if (_mainWindow && _mainWindow.window)
             {
-                _mainWindow.window.showMessageBox("DCore Test"d, "✅ DCore integration test passed!\n\nCheck the log for detailed results."d);
+                auto notif = new AutoCloseNotification(
+                    "DCore Test"d,
+                    "✅ Integration test passed — check log for details."d);
+                _mainWindow.window.showPopup(notif);
+                notif.armTimer();
             }
         }
         catch (Exception e)
@@ -149,8 +214,11 @@ class DCoreIntegrationManager
             {
                 import std.utf : toUTF32;
 
-                string errorMsg = "❌ DCore test failed:\n" ~ e.msg;
-                _mainWindow.window.showMessageBox("DCore Test Failed"d, errorMsg.toUTF32);
+                auto notif = new AutoCloseNotification(
+                    "DCore Test Failed"d,
+                    ("❌ " ~ e.msg).toUTF32);
+                _mainWindow.window.showPopup(notif);
+                notif.armTimer();
             }
         }
     }

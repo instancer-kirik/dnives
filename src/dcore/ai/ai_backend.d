@@ -561,6 +561,48 @@ class AIBackendManager {
     }
 
     /**
+     * Get the name of the current default backend
+     */
+    @property string defaultBackend() {
+        return _defaultBackend;
+    }
+
+    /**
+     * Set the active backend by name. Falls back silently if name is unknown.
+     */
+    void setActiveBackend(string name) {
+        if (name in _backends)
+            _defaultBackend = name;
+        else
+            Log.w("AIBackendManager: Unknown backend name '", name, "', keeping current default.");
+    }
+
+    /**
+     * Send chat to a named backend, falling back to default if name is empty or unknown
+     */
+    AIResponse chatWith(string backendName, AIMessage[] messages, JSONValue options = JSONValue.emptyObject) {
+        AIBackend backend = backendName.empty ? null : getBackend(backendName);
+        if (!backend) backend = getDefaultBackend();
+        if (!backend)
+            throw new Exception("No AI backend available");
+        return backend.chat(messages, options);
+    }
+
+    /**
+     * Send streaming chat to a named backend, falling back to default if name is empty or unknown
+     */
+    void chatStreamWith(string backendName,
+                        AIMessage[] messages,
+                        void delegate(AIStreamChunk) onChunk,
+                        JSONValue options = JSONValue.emptyObject) {
+        AIBackend backend = backendName.empty ? null : getBackend(backendName);
+        if (!backend) backend = getDefaultBackend();
+        if (!backend)
+            throw new Exception("No AI backend available");
+        backend.chatStream(messages, onChunk, options);
+    }
+
+    /**
      * Send chat to default backend
      */
     AIResponse chat(AIMessage[] messages, JSONValue options = JSONValue.emptyObject) {

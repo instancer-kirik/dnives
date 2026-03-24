@@ -11,6 +11,7 @@ import std.json;
 import std.datetime;
 import std.exception;
 import std.conv;
+import std.format;
 import std.typecons;
 import std.uuid;
 import core.time;
@@ -35,7 +36,9 @@ import dlangui.graphics.drawbuf;
 import dcore.core;
 import dcore.ai.ai_backend;
 import dcore.ai.context_manager;
+import dcore.ai.chatgpt_importer;
 import dcore.code.symbol_tracker;
+import dlangui.widgets.combobox;
 
 /**
  * ChatMessage - Represents a single chat message
@@ -48,6 +51,9 @@ struct ChatMessage {
     string[] codeBlocks;      // Extracted code blocks
     DateTime timestamp;
     bool isStreaming;
+    string source = "local";  // local | imported_chatgpt
+    string externalId;        // Original message ID from imported source
+    string parentMessageId;   // Parent relationship for imported/threaded data
 
     this(AIMessage.Role role, string content) {
         this.id = randomUUID().toString();
@@ -71,6 +77,9 @@ struct ChatThread {
     DateTime created;
     DateTime lastActivity;
     JSONValue metadata;
+    string source = "local";      // local | imported_chatgpt
+    string externalId;            // Original conversation id from imported source
+    string importPath;            // Source file path for imports
 
     this(string title, string workspacePath) {
         this.id = randomUUID().toString();
@@ -79,6 +88,7 @@ struct ChatThread {
         this.created = cast(DateTime)Clock.currTime();
         this.lastActivity = cast(DateTime)Clock.currTime();
         this.metadata = JSONValue.emptyObject;
+        this.source = "local";
     }
 }
 
@@ -120,11 +130,16 @@ class ChatWidget : HorizontalLayout {
 
     // UI components - Left pane (chat)
     private VerticalLayout _leftPane;
+    private HorizontalLayout _chatToolbar;      // view bar strip at top of chat pane
+    private TextWidget _threadSourceBadge;       // shows "local" / "ChatGPT" source
+    private ComboBox _backendCombo;              // backend selector
+    private HorizontalLayout _continueBanner;    // shown for imported threads
+    private Button _continueBtn;
     private TabWidget _threadTabs;
     private ScrollWidget _chatScroll;
     private VerticalLayout _chatContainer;
     private HorizontalLayout _inputContainer;
-    private EditBox _inputBox;
+    private EditLine _inputBox;
     private Button _sendButton;
     private Button _attachButton;
     private Button _stopButton;
@@ -143,6 +158,9 @@ class ChatWidget : HorizontalLayout {
     private FileReference[string] _fileReferences;
     private bool _isStreaming;
     private string _streamingMessageId;
+    private string _selectedBackend;   // "" means use AIBackendManager default
+    private string[] _backendNames;    // parallel to combobox items
+    private bool _suppressTabChange;   // guard against re-entrant tab events
 
     // Configuration
     private int _maxMessageLength = 4000;
@@ -196,10 +214,16 @@ class ChatWidget : HorizontalLayout {
      * Create the chat interface (left pane)
      */
     private void createChatInterface() {
+        // --- View bar: backend selector + thread source badge ---
+        createChatToolbar();
+
         // Thread tabs
         _threadTabs = new TabWidget("THREAD_TABS");
         _threadTabs.layoutWidth(FILL_PARENT).layoutHeight(WRAP_CONTENT);
         _leftPane.addChild(_threadTabs);
+
+        // --- Continue banner (shown only for imported threads) ---
+        createContinueBanner();
 
         // Chat area with scroll
         _chatScroll = new ScrollWidget("CHAT_SCROLL");
@@ -216,18 +240,19 @@ class ChatWidget : HorizontalLayout {
         // Input area
         _inputContainer = new HorizontalLayout("INPUT_CONTAINER");
         _inputContainer.layoutWidth(FILL_PARENT).layoutHeight(WRAP_CONTENT);
-        _inputContainer.padding(Rect(10, 10, 10, 10));
+        _inputContainer.minHeight(56);
+        _inputContainer.padding(Rect(8, 8, 8, 8));
+        _inputContainer.backgroundColor(0x1A1A1A);
 
         _attachButton = new Button("ATTACH_BTN", "📎");
         _attachButton.tooltipText = "Attach files or symbols";
         _inputContainer.addChild(_attachButton);
 
-        _inputBox = new EditBox("INPUT_BOX");
-        _inputBox.layoutWidth(FILL_PARENT).layoutHeight(WRAP_CONTENT);
-        // EditBox properties may not exist in this version
-        // _inputBox.minLines = 2;
-        // _inputBox.maxLines = 8;
-        // _inputBox.placeholder = "Ask a question about your code...";
+        _inputBox = new EditLine("INPUT_BOX");
+        _inputBox.layoutWidth(FILL_PARENT);
+        _inputBox.minHeight(36);
+        _inputBox.padding(Rect(8, 6, 8, 6));
+        _inputBox.tooltipText = "Type a message and press Enter"d;
         _inputContainer.addChild(_inputBox);
 
         _sendButton = new Button("SEND_BTN", "Send");
@@ -240,6 +265,172 @@ class ChatWidget : HorizontalLayout {
         _inputContainer.addChild(_stopButton);
 
         _leftPane.addChild(_inputContainer);
+    }
+
+    /**
+     * Create the top toolbar strip (view bar) for the chat pane.
+     * Contains the thread source badge and the backend selector.
+     */
+    private void createChatToolbar() {
+        _chatToolbar = new HorizontalLayout("CHAT_TOOLBAR");
+        _chatToolbar.layoutWidth = FILL_PARENT;
+        _chatToolbar.layoutHeight = WRAP_CONTENT;
+        _chatToolbar.padding = Rect(8, 4, 8, 4);
+        _chatToolbar.backgroundColor = 0x252526;
+
+        // Thread source badge — updated by updateThreadBar()
+        _threadSourceBadge = new TextWidget("THREAD_SOURCE_BADGE", "● local"d);
+        _threadSourceBadge.textColor = 0x5B9ECF;
+        _threadSourceBadge.fontSize = 11;
+        _chatToolbar.addChild(_threadSourceBadge);
+
+        // Flexible spacer
+        auto spacer = new Widget("TOOLBAR_SPACER");
+        spacer.layoutWidth = FILL_PARENT;
+        spacer.layoutWeight = 1;
+        _chatToolbar.addChild(spacer);
+
+        // "Backend:" label
+        auto backendLabel = new TextWidget("BACKEND_LABEL", "Backend: "d);
+        backendLabel.textColor = 0x9B9B9B;
+        backendLabel.fontSize = 11;
+        _chatToolbar.addChild(backendLabel);
+
+        // Backend selector — populated lazily via populateBackendSelector()
+        _backendCombo = new ComboBox("BACKEND_COMBO", ["openai"d, "anthropic"d, "ollama"d]);
+        _backendCombo.selectedItemIndex = 0;
+        _backendNames = ["openai", "anthropic", "ollama"];
+        _selectedBackend = "";   // empty == use AIBackendManager default
+
+        _backendCombo.itemClick = delegate(Widget source, int index) {
+            if (index >= 0 && index < cast(int)_backendNames.length) {
+                _selectedBackend = _backendNames[index];
+                Log.i("ChatWidget: Backend selected: ", _selectedBackend);
+            }
+            return true;
+        };
+
+        _chatToolbar.addChild(_backendCombo);
+        _leftPane.addChild(_chatToolbar);
+    }
+
+    /**
+     * Create the continue banner shown below thread tabs for imported threads.
+     */
+    private void createContinueBanner() {
+        _continueBanner = new HorizontalLayout("CONTINUE_BANNER");
+        _continueBanner.layoutWidth = FILL_PARENT;
+        _continueBanner.layoutHeight = WRAP_CONTENT;
+        _continueBanner.padding = Rect(10, 5, 10, 5);
+        _continueBanner.backgroundColor = 0x1E2A1E;
+        _continueBanner.visibility = Visibility.Gone;
+
+        auto importIcon = new TextWidget("IMPORT_ICON", "📥  "d);
+        importIcon.textColor = 0x7EC87E;
+        importIcon.fontSize = 11;
+        _continueBanner.addChild(importIcon);
+
+        auto importInfo = new TextWidget("IMPORT_INFO", "Imported conversation"d);
+        importInfo.textColor = 0xA0A0A0;
+        importInfo.fontSize = 11;
+        _continueBanner.addChild(importInfo);
+
+        auto bannerSpacer = new Widget("BANNER_SPACER");
+        bannerSpacer.layoutWidth = FILL_PARENT;
+        bannerSpacer.layoutWeight = 1;
+        _continueBanner.addChild(bannerSpacer);
+
+        _continueBtn = new Button("CONTINUE_BTN", "▶  Continue"d);
+        _continueBtn.click = delegate(Widget source) {
+            continueImportedThread();
+            return true;
+        };
+        _continueBanner.addChild(_continueBtn);
+
+        _leftPane.addChild(_continueBanner);
+    }
+
+    /**
+     * Populate the backend selector from the live backend manager.
+     * Call this after the AI backend manager is fully initialised.
+     */
+    void populateBackendSelector() {
+        if (!_backendCombo || !_aiBackend) return;
+
+        auto available = _aiBackend.getAvailableBackends();
+        if (available.empty) return;
+
+        _backendNames = available;
+
+        dstring[] labels;
+        foreach (name; _backendNames)
+            labels ~= name.to!dstring;
+
+        _backendCombo.items = labels;
+
+        // Pre-select the current default
+        string def = _aiBackend.defaultBackend;
+        foreach (i, name; _backendNames) {
+            if (name == def) {
+                _backendCombo.selectedItemIndex = cast(int)i;
+                break;
+            }
+        }
+        // _selectedBackend stays "" so AIBackendManager default is used
+        // until the user explicitly picks something
+    }
+
+    /**
+     * Update the view bar and continue banner to reflect the current thread.
+     */
+    private void updateThreadBar() {
+        if (_currentThreadId.empty || _currentThreadId !in _threads) return;
+
+        auto thread = _threads[_currentThreadId];
+        bool isImported = (thread.source == "imported_chatgpt");
+
+        // Update source badge
+        if (_threadSourceBadge) {
+            if (isImported) {
+                _threadSourceBadge.text = "📥  ChatGPT"d;
+                _threadSourceBadge.textColor = 0xE8A44A;
+            } else {
+                _threadSourceBadge.text = "●  local"d;
+                _threadSourceBadge.textColor = 0x5B9ECF;
+            }
+        }
+
+        // Show/hide continue banner and update message count
+        if (_continueBanner) {
+            _continueBanner.visibility = isImported ? Visibility.Visible : Visibility.Gone;
+
+            if (isImported) {
+                auto infoWidget = cast(TextWidget)_continueBanner.childById("IMPORT_INFO");
+                if (infoWidget) {
+                    infoWidget.text = format("Imported from ChatGPT · %d messages",
+                                            thread.messages.length).to!dstring;
+                }
+            }
+        }
+    }
+
+    /**
+     * Begin continuing an imported thread.
+     * The imported messages are already in the thread's message list so the
+     * AI will see the full history as context.  All we need to do is focus
+     * the input box and hide the banner.
+     */
+    private void continueImportedThread() {
+        if (_inputBox)
+            _inputBox.setFocus();
+
+        // Dismiss the banner — user has acknowledged they want to continue
+        if (_continueBanner)
+            _continueBanner.visibility = Visibility.Gone;
+
+        Log.i("ChatWidget: Continuing imported thread '",
+              _currentThreadId, "' with backend: ",
+              _selectedBackend.empty ? "(default)" : _selectedBackend);
     }
 
     /**
@@ -334,7 +525,9 @@ class ChatWidget : HorizontalLayout {
 
         _inputBox.keyEvent = delegate(Widget source, KeyEvent event) {
             if (event.action == KeyAction.KeyDown) {
-                if (event.keyCode == KeyCode.RETURN && event.flags & KeyFlag.Control) {
+                // Enter alone sends; Shift+Enter is reserved for future multiline upgrade
+                if (event.keyCode == KeyCode.RETURN &&
+                    !(event.flags & (KeyFlag.Shift | KeyFlag.Alt))) {
                     sendMessage();
                     return true;
                 }
@@ -373,9 +566,10 @@ class ChatWidget : HorizontalLayout {
             searchSymbols(_symbolSearch.text.to!string);
         };
 
-        // Thread tab change
+        // Thread tab change — guarded to prevent re-entrancy during bulk tab ops
         _threadTabs.tabChanged = delegate(string tabId, string newTabId) {
-            switchToThread(newTabId);
+            if (!_suppressTabChange)
+                switchToThread(newTabId);
         };
     }
 
@@ -389,6 +583,7 @@ class ChatWidget : HorizontalLayout {
 
         // Add user message to current thread
         auto userMessage = ChatMessage(AIMessage.Role.User, messageText);
+        userMessage.source = "local";
         addMessageToThread(_currentThreadId, userMessage);
 
         // Clear input
@@ -414,6 +609,7 @@ class ChatWidget : HorizontalLayout {
         // Create assistant message for streaming
         auto assistantMessage = ChatMessage(AIMessage.Role.Assistant, "");
         assistantMessage.isStreaming = true;
+        assistantMessage.source = "local";
         _streamingMessageId = assistantMessage.id;
         addMessageToThread(_currentThreadId, assistantMessage);
 
@@ -440,9 +636,10 @@ class ChatWidget : HorizontalLayout {
             }
         }
 
-        // Stream the response
+        // Stream the response — routes to the backend the user selected in
+        // the toolbar, or falls back to AIBackendManager's default.
         try {
-            _aiBackend.chatStream(messages, &onStreamChunk);
+            _aiBackend.chatStreamWith(_selectedBackend, messages, &onStreamChunk);
         } catch (Exception e) {
             Log.e("ChatWidget: AI request failed: ", e.msg);
             finishStreaming("Sorry, there was an error processing your request: " ~ e.msg);
@@ -531,16 +728,25 @@ class ChatWidget : HorizontalLayout {
         auto thread = ChatThread(title, workspacePath);
         _threads[thread.id] = thread;
 
-        // Add tab
+        // Suppress tabChanged callbacks while we mutate tab state to avoid
+        // re-entrant refreshChatDisplay / updateThreadBar calls mid-operation.
+        _suppressTabChange = true;
+        scope(exit) _suppressTabChange = false;
+
         auto tabWidget = new VerticalLayout(thread.id);
-        auto tab = _threadTabs.addTab(tabWidget, title.to!dstring);
+        _threadTabs.addTab(tabWidget, title.to!dstring);
 
         // Create context for this thread
         _contextManager.createConversation(workspacePath, _fileReferences.keys);
 
-        // Switch to new thread
+        // Commit the switch — only one call path, no re-entrancy risk here.
         _currentThreadId = thread.id;
         _threadTabs.selectTab(thread.id);
+
+        // Restore handler then do the one authoritative UI update.
+        _suppressTabChange = false;
+        refreshChatDisplay();
+        updateThreadBar();
 
         return thread.id;
     }
@@ -554,6 +760,7 @@ class ChatWidget : HorizontalLayout {
 
         _currentThreadId = threadId;
         refreshChatDisplay();
+        updateThreadBar();
     }
 
     /**
@@ -659,6 +866,25 @@ class ChatWidget : HorizontalLayout {
 
             messageLayout.addChild(actionsLayout);
         }
+
+        // Source/provenance badge
+        auto sourceLayout = new HorizontalLayout("MSG_SOURCE_" ~ message.id);
+        sourceLayout.layoutWidth(FILL_PARENT).layoutHeight(WRAP_CONTENT);
+
+        string sourceText = message.source.empty ? "local" : message.source;
+        auto sourceBadge = new TextWidget("MSG_SOURCE_LABEL_" ~ message.id, ("Source: " ~ sourceText).to!dstring);
+        sourceBadge.fontSize = 10;
+        sourceBadge.textColor = 0x9B9B9B;
+        sourceLayout.addChild(sourceBadge);
+
+        if (!message.externalId.empty) {
+            auto extId = new TextWidget("MSG_EXTERNAL_ID_" ~ message.id, (" · ID: " ~ message.externalId).to!dstring);
+            extId.fontSize = 10;
+            extId.textColor = 0x6F6F6F;
+            sourceLayout.addChild(extId);
+        }
+
+        messageLayout.addChild(sourceLayout);
 
         return messageLayout;
     }
@@ -1026,6 +1252,11 @@ class ChatWidget : HorizontalLayout {
         JSONValue export_ = JSONValue.emptyObject;
         export_["title"] = thread.title;
         export_["created"] = thread.created.toISOExtString();
+        export_["source"] = thread.source;
+        if (!thread.externalId.empty)
+            export_["external_id"] = thread.externalId;
+        if (!thread.importPath.empty)
+            export_["import_path"] = thread.importPath;
         export_["messages"] = JSONValue.emptyArray;
 
         foreach (message; thread.messages) {
@@ -1033,6 +1264,11 @@ class ChatWidget : HorizontalLayout {
             msgJson["role"] = message.role.to!string;
             msgJson["content"] = message.content;
             msgJson["timestamp"] = message.timestamp.toISOExtString();
+            msgJson["source"] = message.source;
+            if (!message.externalId.empty)
+                msgJson["external_id"] = message.externalId;
+            if (!message.parentMessageId.empty)
+                msgJson["parent_message_id"] = message.parentMessageId;
             export_["messages"].array ~= msgJson;
         }
 
@@ -1046,20 +1282,105 @@ class ChatWidget : HorizontalLayout {
 
     /**
      * Import conversation
+     *
+     * Supports:
+     * - Legacy internal export format
+     * - ChatGPT export format (single conversation or array)
      */
     void importConversation(string inputPath) {
+        // First, try ChatGPT export format using importer
+        try {
+            auto importer = new ChatGPTImporter();
+            auto result = importer.importFromFile(inputPath);
+
+            if (!result.threads.empty) {
+                auto workspace = _core.getCurrentWorkspace();
+                string workspacePath = workspace ? workspace.path : "";
+
+                // Suppress tabChanged for the whole import batch — avoids
+                // re-entrant refreshChatDisplay while we add many tabs at once.
+                _suppressTabChange = true;
+                scope(exit) _suppressTabChange = false;
+
+                foreach (importedThread; result.threads) {
+                    auto thread = ChatThread(importedThread.title, workspacePath);
+                    thread.source = "imported_chatgpt";
+                    thread.externalId = importedThread.id;
+                    thread.importPath = inputPath;
+                    thread.created = importedThread.createdAt;
+                    thread.lastActivity = importedThread.updatedAt;
+                    thread.metadata = importedThread.rawMetadata;
+
+                    foreach (importedMessage; importedThread.messagesLinear) {
+                        ChatMessage msg;
+                        msg.id = randomUUID().toString();
+                        msg.role = importedMessage.role;
+                        msg.content = importedMessage.content;
+                        msg.timestamp = importedMessage.timestamp;
+                        msg.isStreaming = false;
+                        msg.source = "imported_chatgpt";
+                        msg.externalId = importedMessage.id;
+                        msg.parentMessageId = importedMessage.parentId;
+                        thread.messages ~= msg;
+                    }
+
+                    _threads[thread.id] = thread;
+
+                    // Create a widget for the chat thread content
+                    auto threadWidget = new VerticalLayout(thread.id);
+                    threadWidget.layoutWidth = FILL_PARENT;
+                    threadWidget.layoutHeight = FILL_PARENT;
+
+                    _threadTabs.addTab(threadWidget, thread.title.to!dstring);
+                }
+
+                if (!_threads.empty) {
+                    // Switch to most recently added imported thread
+                    auto last = result.threads[$ - 1];
+                    foreach (id, t; _threads) {
+                        if (t.externalId == last.id && t.source == "imported_chatgpt") {
+                            _currentThreadId = id;
+                            // suppressTabChange is still true here from the
+                            // scope above — safe to selectTab then do one
+                            // authoritative refresh after.
+                            _suppressTabChange = false;
+                            _threadTabs.selectTab(id);
+                            refreshChatDisplay();
+                            updateThreadBar();
+                            break;
+                        }
+                    }
+                }
+
+                Log.i("ChatWidget: Imported ChatGPT conversations from ", inputPath,
+                      " (threads=", to!string(result.summary.importedConversations),
+                      ", messages=", to!string(result.summary.totalMessages), ")");
+
+                foreach (warn; result.summary.warnings) {
+                    Log.w("ChatWidget Import warning: ", warn);
+                }
+                return;
+            }
+        } catch (Exception e) {
+            Log.w("ChatWidget: ChatGPT import path failed, trying legacy format: ", e.msg);
+        }
+
+        // Fallback to legacy internal export format
         try {
             string content = readText(inputPath);
             JSONValue import_ = parseJSON(content);
 
             string title = import_["title"].str;
-            auto thread = ChatThread(title, _core.getCurrentWorkspace().path);
+            auto workspace = _core.getCurrentWorkspace();
+            string workspacePath = workspace ? workspace.path : "";
+            auto thread = ChatThread(title, workspacePath);
 
             foreach (msgJson; import_["messages"].array) {
                 ChatMessage msg;
                 msg.role = msgJson["role"].str.to!(AIMessage.Role);
                 msg.content = msgJson["content"].str;
                 msg.timestamp = DateTime.fromISOExtString(msgJson["timestamp"].str);
+                msg.source = "local";
                 thread.messages ~= msg;
             }
 
@@ -1069,9 +1390,9 @@ class ChatWidget : HorizontalLayout {
             threadWidget.layoutWidth = FILL_PARENT;
             threadWidget.layoutHeight = FILL_PARENT;
 
-            auto tab = _threadTabs.addTab(threadWidget, title.to!dstring);
+            _threadTabs.addTab(threadWidget, title.to!dstring);
 
-            Log.i("ChatWidget: Imported conversation from ", inputPath);
+            Log.i("ChatWidget: Imported legacy conversation from ", inputPath);
         } catch (Exception e) {
             Log.e("ChatWidget: Failed to import conversation: ", e.msg);
         }

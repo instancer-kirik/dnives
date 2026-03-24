@@ -30,6 +30,9 @@ import dlangide.ui.settings;
 import dlangide.ui.debuggerui;
 import dlangide.ui.dialogs.projectdirdialog;
 import dlangide.ui.dcore_integration;
+import dlangide.ui.commands : ACTION_AI_CHAT_TOGGLE, ACTION_AI_NEW_CONVERSATION, ACTION_AI_IMPORT_CHATGPT;
+import dlangide.ui.fontshowcase;
+import dlangide.ui.previewpanel;
 import dcore.widgets.filesystembrowser;
 
 import dlangide.workspace.workspace;
@@ -639,6 +642,52 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         _tabs.removeTab(HOME_SCREEN_ID);
     }
 
+    static immutable FONTS_DOCK_ID = "FONTS_DOCK";
+    void toggleFontShowcase()
+    {
+        auto fontsDock = _dockHost.childById!DockWindow(FONTS_DOCK_ID);
+        if (fontsDock)
+        {
+            fontsDock.visibility = fontsDock.visibility == Visibility.Visible ?
+                Visibility.Gone : Visibility.Visible;
+            if (fontsDock.visibility == Visibility.Visible)
+                fontsDock.setFocus();
+        }
+        else
+        {
+            fontsDock = new DockWindow(FONTS_DOCK_ID);
+            fontsDock.caption.text = "Font Showcase"d;
+            fontsDock.dockAlignment = DockAlignment.Right;
+            fontsDock.layoutWidth = 300;
+            fontsDock.bodyWidget = new FontShowcaseWidget("FONT_SHOWCASE_WIDGET");
+            _dockHost.addDockedWindow(fontsDock);
+            fontsDock.setFocus();
+        }
+    }
+
+    static immutable PREVIEW_DOCK_ID = "PREVIEW_DOCK";
+    void togglePreviewPanel()
+    {
+        auto previewDock = _dockHost.childById!DockWindow(PREVIEW_DOCK_ID);
+        if (previewDock)
+        {
+            previewDock.visibility = previewDock.visibility == Visibility.Visible ?
+                Visibility.Gone : Visibility.Visible;
+            if (previewDock.visibility == Visibility.Visible)
+                previewDock.setFocus();
+        }
+        else
+        {
+            previewDock = new DockWindow(PREVIEW_DOCK_ID);
+            previewDock.caption.text = "Mobile Preview"d;
+            previewDock.dockAlignment = DockAlignment.Right;
+            previewDock.layoutWidth = 400;
+            previewDock.bodyWidget = new PreviewPanelWidget("PREVIEW_PANEL_WIDGET");
+            _dockHost.addDockedWindow(previewDock);
+            previewDock.setFocus();
+        }
+    }
+
     static immutable TERMINAL_DOCK_ID = "TERMINAL_DOCK";
     void toggleTerminal()
     {
@@ -1049,6 +1098,16 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         toolsItem.addSeparator();
         toolsItem.add(dcoreItem);
 
+        // AI menu — top level, always visible
+        MenuItem aiItem = new MenuItem(new Action(35, "MENU_AI"c));
+        aiItem.add(ACTION_AI_CHAT_TOGGLE);
+        aiItem.add(ACTION_AI_NEW_CONVERSATION);
+        aiItem.addSeparator();
+        aiItem.add(ACTION_AI_IMPORT_CHATGPT);
+
+        MenuItem designItem = new MenuItem(new Action(36, "MENU_DESIGN"c));
+        designItem.add(ACTION_VIEW_FONT_SHOWCASE, ACTION_VIEW_PREVIEW_PANEL);
+
         MenuItem windowItem = new MenuItem(new Action(3, "MENU_WINDOW"c));
         //windowItem.add(new Action(30, "MENU_WINDOW_PREFERENCES"));
         windowItem.add(ACTION_WINDOW_CLOSE_DOCUMENT, ACTION_WINDOW_CLOSE_ALL_DOCUMENTS, ACTION_WINDOW_TOGGLE_TERMINAL);
@@ -1063,6 +1122,8 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         mainMenuItems.add(buildItem);
         mainMenuItems.add(debugItem);
         mainMenuItems.add(toolsItem);
+        mainMenuItems.add(aiItem);
+        mainMenuItems.add(designItem);
         //mainMenuItems.add(viewItem);
         mainMenuItems.add(windowItem);
         mainMenuItems.add(helpItem);
@@ -1400,6 +1461,75 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         }
     }
 
+    // ---------------------------------------------------------------
+    // AI Chat handler helpers
+    // ---------------------------------------------------------------
+
+    /**
+     * Resolve and lazily initialise the AIIntegration instance.
+     * Returns null and shows one error dialog if anything is missing.
+     * On subsequent calls after a successful init, returns immediately
+     * without touching any dialogs.
+     */
+    private import dcore.ai.integration : AIIntegration;
+    private AIIntegration resolveAI(bool showError = true) {
+        auto integ = getDCoreIntegration();
+        if (!integ || !integ.isReady()) {
+            if (showError)
+                window.showMessageBox("AI Chat"d,
+                    "❌ DCore integration is not ready."d);
+            return null;
+        }
+
+        auto dcore = integ.getDCore();
+        if (!dcore) return null;
+
+        auto ai = dcore.getAIIntegration();
+        if (!ai) {
+            if (showError)
+                window.showMessageBox("AI Chat"d,
+                    "❌ AI integration is not available."d);
+            return null;
+        }
+
+        if (!ai.isInitialized()) {
+            try {
+                ai.initialize(dcore.getLSPManager());
+            } catch (Exception e) {
+                if (showError)
+                    window.showMessageBox("AI Chat"d,
+                        ("❌ Failed to initialise AI: " ~ e.msg).toUTF32);
+                return null;
+            }
+        }
+
+        return ai;
+    }
+
+    void handleAIChatToggle() {
+        auto ai = resolveAI();
+        if (!ai) return;
+        ai.ensureOpenInHost(_dockHost);
+    }
+
+    void handleAINewConversation() {
+        auto ai = resolveAI();
+        if (!ai) return;
+        ai.ensureOpenInHost(_dockHost);
+
+        import dcore.ai.integration : ActionId;
+        ai.handleMenuAction(new Action(ActionId.AI_NEW_CONVERSATION, ""d));
+    }
+
+    void handleAIImportChatGPT() {
+        auto ai = resolveAI();
+        if (!ai) return;
+        ai.ensureOpenInHost(_dockHost);
+
+        import dcore.ai.integration : ActionId;
+        ai.handleMenuAction(new Action(ActionId.AI_IMPORT_CHATGPT_EXPORT, ""d));
+    }
+
     FileDialog createFileDialog(UIString caption, int fileDialogFlags = DialogFlag.Modal | DialogFlag.Resizable | FileDialogFlag
             .FileMustExist)
     {
@@ -1443,6 +1573,21 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
                 return true;
             case IDEActions.DCoreVaultManager:
                 handleDCoreVaultManager();
+                return true;
+            case IDEActions.AIChatToggle:
+                handleAIChatToggle();
+                return true;
+            case IDEActions.AINewConversation:
+                handleAINewConversation();
+                return true;
+            case IDEActions.AIImportChatGPT:
+                handleAIImportChatGPT();
+                return true;
+            case IDEActions.ViewFontShowcase:
+                toggleFontShowcase();
+                return true;
+            case IDEActions.ViewPreviewPanel:
+                togglePreviewPanel();
                 return true;
             case IDEActions.WindowToggleTerminal:
                 toggleTerminal();

@@ -192,6 +192,12 @@ class AIManager {
         if (!_chatWidget || !dockHost)
             return;
 
+        // Already created — just make sure it is visible
+        if (_chatDock) {
+            _chatDock.visibility = Visibility.Visible;
+            return;
+        }
+
         // Simplified dock window creation - avoid API compatibility issues
         try {
             _chatDock = new DockWindow("AI_CHAT");
@@ -203,6 +209,13 @@ class AIManager {
         }
 
         Log.i("AIManager: Created chat dock window");
+    }
+
+    /**
+     * Get the chat dock window (may be null before createChatDock is called)
+     */
+    @property DockWindow chatDock() {
+        return _chatDock;
     }
 
     /**

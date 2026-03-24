@@ -94,6 +94,15 @@ enum IDEActions : int
     DCoreRunTest,
     DCoreShowConfig,
     DCoreVaultManager,
+
+    // AI Chat Actions
+    AIChatToggle,
+    AINewConversation,
+    AIImportChatGPT,
+
+    // Design & Style Actions
+    ViewFontShowcase,
+    ViewPreviewPanel,
 }
 
 __gshared static this()
@@ -277,6 +286,18 @@ const Action ACTION_DCORE_SHOW_CONFIG = (
     new Action(IDEActions.DCoreShowConfig, "MENU_DCORE_SHOW_CONFIG"c));
 const Action ACTION_DCORE_VAULT_MANAGER = (
     new Action(IDEActions.DCoreVaultManager, "MENU_DCORE_VAULT_MANAGER"c));
+
+// AI Chat Actions
+const Action ACTION_AI_CHAT_TOGGLE = (
+    new Action(IDEActions.AIChatToggle, "MENU_AI_CHAT_TOGGLE"c, null, KeyCode.F4, cast(KeyFlag)0));
+const Action ACTION_AI_NEW_CONVERSATION = (
+    new Action(IDEActions.AINewConversation, "MENU_AI_NEW_CONVERSATION"c, null, KeyCode.KEY_N, KeyFlag.Control | KeyFlag.Shift));
+const Action ACTION_AI_IMPORT_CHATGPT = (
+    new Action(IDEActions.AIImportChatGPT, "MENU_AI_IMPORT_CHATGPT"c));
+
+// Design & Style Actions
+const Action ACTION_VIEW_FONT_SHOWCASE = new Action(IDEActions.ViewFontShowcase, "MENU_VIEW_FONT_SHOWCASE"c, "font");
+const Action ACTION_VIEW_PREVIEW_PANEL = new Action(IDEActions.ViewPreviewPanel, "MENU_VIEW_PREVIEW_PANEL"c, "mobile");
 
 const Action[] STD_IDE_ACTIONS = [
     ACTION_EDIT_COPY, ACTION_EDIT_PASTE, ACTION_EDIT_CUT,

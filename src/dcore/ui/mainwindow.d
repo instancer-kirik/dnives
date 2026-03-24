@@ -161,6 +161,8 @@ class MainWindow : AppFrame {
         viewMenu.add(new Action(ActionID.ViewTerminal, "Terminal"d));
         viewMenu.add(new Action(ActionID.ViewOutput, "Output"d));
         viewMenu.addSeparator();
+        viewMenu.add(new Action(ActionID.ViewAIChat, "AI Chat"d, null, KeyCode.F4, cast(KeyFlag)0));
+        viewMenu.addSeparator();
         viewMenu.add(new Action(ActionID.ViewZoomIn, "Zoom In"d, null, KeyCode.KEY_ADD, KeyFlag.Control));
         viewMenu.add(new Action(ActionID.ViewZoomOut, "Zoom Out"d, null, KeyCode.KEY_SUBTRACT, KeyFlag.Control));
         viewMenu.add(new Action(ActionID.ViewZoomReset, "Reset Zoom"d, null, KeyCode.KEY_0, KeyFlag.Control));
@@ -188,12 +190,35 @@ class MainWindow : AppFrame {
         helpMenu.add(new Action(ActionID.HelpAbout, "About"d));
         helpMenu.add(new Action(ActionID.HelpDocumentation, "Documentation"d));
 
-        // Add AI menu items if AIIntegration is available
-        if (_aiIntegration) {
-            auto aiMenu = _aiIntegration.createAIMenuItems();
-            if (aiMenu) {
-                rootMenu.add(aiMenu);
-            }
+        // AI menu — always present; actions route through ccCore at runtime
+        {
+            import dcore.ai.integration : ActionId;
+
+            auto aiMenu = new MenuItem(new Action(9, "&AI"d));
+
+            // Chat
+            aiMenu.add(new Action(ActionID.ViewAIChat,        "Open AI Chat\tF4"d));
+            aiMenu.add(new Action(ActionId.AI_NEW_CONVERSATION, "New Conversation\tCtrl+Shift+N"d));
+
+            aiMenu.addSeparator();
+
+            // Code assistance
+            aiMenu.add(new Action(ActionId.AI_CODE_SUGGESTIONS, "Get Code Suggestions\tCtrl+Shift+S"d));
+            aiMenu.add(new Action(ActionId.AI_ASK_SELECTION,    "Ask About Selection\tCtrl+Shift+A"d));
+            aiMenu.add(new Action(ActionId.AI_REFACTOR,         "Start Refactoring\tCtrl+Shift+R"d));
+
+            aiMenu.addSeparator();
+
+            // Conversations
+            aiMenu.add(new Action(ActionId.AI_IMPORT_CHATGPT_EXPORT, "Import ChatGPT Export..."d));
+            aiMenu.add(new Action(ActionId.AI_ROLLBACK,              "Rollback Last Changes\tCtrl+Shift+Z"d));
+            aiMenu.add(new Action(ActionId.AI_SESSIONS,              "Manage Sessions..."d));
+
+            aiMenu.addSeparator();
+
+            aiMenu.add(new Action(ActionId.AI_SETTINGS, "AI Settings..."d));
+
+            rootMenu.add(aiMenu);
         }
 
         // Set menu items
@@ -423,6 +448,11 @@ class MainWindow : AppFrame {
                     return true;
                 case ActionID.ViewOutput:
                     toggleDockPanel("Output");
+                    return true;
+                case ActionID.ViewAIChat:
+                    if (ccCore && ccCore.dcore && ccCore.dcore.isAIEnabled()) {
+                        ccCore.dcore.getAIIntegration().toggleAIChat();
+                    }
                     return true;
                 case ActionID.ViewZoomIn:
                     handleZoomIn();
@@ -876,6 +906,14 @@ class MainWindow : AppFrame {
     }
 
     /**
+     * Wire in the AIIntegration instance after startup.
+     * Call this from DCore once the AI system is initialised.
+     */
+    void setAIIntegration(AIIntegration ai) {
+        _aiIntegration = ai;
+    }
+
+    /**
      * Get main menu for external modification
      */
     MainMenu getMainMenu() {
@@ -902,6 +940,7 @@ enum DockPosition {
  * Action IDs for menu/toolbar commands
  */
 enum ActionID : int {
+    ViewAIChat = 8999,
     // File menu
     FileNew = 1000,
     FileOpen,

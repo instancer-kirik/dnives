@@ -166,14 +166,6 @@ extern (C) int UIAppMain(string[] args)
             if (dcoreReady)
             {
                 Log.i("🎉 DCore additive enhancements ready!");
-
-                // Demonstrate DCore integration
-                auto integration = getDCoreIntegration();
-                if (integration)
-                {
-                    integration.showStatus();
-                    integration.runDCoreTest();
-                }
             }
             else
             {
@@ -193,11 +185,22 @@ extern (C) int UIAppMain(string[] args)
             if (!frame.isOpenedWorkspace)
                 frame.showHomeScreen();
 
-            // Show window
+            // Show window first so the event loop is running before any popups
             window.show();
 
             // Restore UI state
             frame.restoreUIStateOnStartup();
+
+            // Show brief auto-closing DCore status popups now that the window is live
+            if (dcoreReady)
+            {
+                auto integration = getDCoreIntegration();
+                if (integration)
+                {
+                    integration.showStatus();
+                    integration.runDCoreTest();
+                }
+            }
 
             Log.i("Dnives IDE initialization complete - entering message loop");
 
