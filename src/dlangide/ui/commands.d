@@ -10,6 +10,7 @@ enum IDEActions : int
     FileNewDirectory,
     FileNewWorkspace,
     FileNewProject,
+    FileNewChartingNotebook,
     FileOpen,
     FileOpenWorkspace,
     FileOpenDirectory,
@@ -135,6 +136,7 @@ const Action ACTION_FILE_NEW_PROJECT = new Action(IDEActions.FileNewProject, "ME
 const Action ACTION_FILE_NEW_WORKSPACE = new Action(IDEActions.FileNewWorkspace, "MENU_FILE_NEW_WORKSPACE"c);
 const Action ACTION_FILE_OPEN = new Action(IDEActions.FileOpen, "MENU_FILE_OPEN"c, "document-open", KeyCode.KEY_O, KeyFlag
         .Control);
+const Action ACTION_FILE_NEW_CHARTING_NOTEBOOK = new Action(IDEActions.FileNewChartingNotebook, "MENU_FILE_NEW_CHARTING_NOTEBOOK"c);
 const Action ACTION_FILE_OPEN_WORKSPACE = new Action(IDEActions.FileOpenWorkspace, "MENU_FILE_OPEN_WORKSPACE"c, null, KeyCode
         .KEY_O, KeyFlag.Control | KeyFlag.Shift);
 const Action ACTION_FILE_OPEN_DIRECTORY = new Action(IDEActions.FileOpenDirectory, "MENU_FILE_OPEN_DIRECTORY"c, "folder-open", KeyCode

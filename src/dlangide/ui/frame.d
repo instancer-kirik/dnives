@@ -34,6 +34,8 @@ import dlangide.ui.commands : ACTION_AI_CHAT_TOGGLE, ACTION_AI_NEW_CONVERSATION,
 import dlangide.ui.fontshowcase;
 import dlangide.ui.previewpanel;
 import dcore.widgets.filesystembrowser;
+import dcore.notebooks.notebook_manager;
+import dcore.notebooks.integration;
 
 import dlangide.workspace.workspace;
 import dlangide.workspace.project;
@@ -2080,8 +2082,19 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
             case IDEActions.FileNewProject:
                 createNewProject(false);
                 return true;
-            case IDEActions.FileNew:
-                addFile(cast(Object) a.objectParam);
+            case IDEActions.FileNewChartingNotebook:
+                auto integration = getNotebookIntegration();
+                if (integration && integration.getManager()) {
+                    auto manager = integration.getManager();
+                    auto template_ = NotebookTemplates.createChartingTemplate();
+                    auto activeWorkspace = manager.getActiveWorkspace();
+                    if (activeWorkspace) {
+                        auto session = activeWorkspace.addNotebookFromTemplate(template_);
+                        _logPanel.logLine("Created new Charting notebook: " ~ session.notebook.name);
+                    } else {
+                        _logPanel.logLine("Error: No active notebook workspace found.");
+                    }
+                }
                 return true;
             case IDEActions.FileNewDirectory:
                 addDirectory(cast(Object) a.objectParam);

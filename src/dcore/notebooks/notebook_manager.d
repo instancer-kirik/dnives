@@ -788,7 +788,6 @@ class NotebookTemplates {
     static Notebook createDataAnalysisTemplate() {
         auto notebook = new Notebook("Data Analysis Notebook");
 
-        // Clear default content
         notebook.sections()[0].cells()[0].source =
             "# Data Analysis Notebook\n\n" ~
             "This notebook template provides a structured approach to data analysis using D.\n\n" ~
@@ -807,11 +806,53 @@ class NotebookTemplates {
             "import std.array;\n\n" ~
             "// Load CSV data\n" ~
             "auto records = File(\"data.csv\").byLine\n" ~
-            "    .map!(line => line.splitter(',').array)\n" ~
-            "    .array;\n\n" ~
-            "writeln(\"Loaded \", records.length, \" records\");");
+                "    .map!(line => line.splitter(',').array)\n" ~
+                "    .array;\n\n" ~
+                "writeln(\"Loaded \", records.length, \" records\");");
         loadingSection.addCell(loadingCell);
         notebook.addSection(loadingSection);
+
+        return notebook;
+    }
+
+    static Notebook createChartingTemplate() {
+        auto notebook = new Notebook("Data Charting Notebook");
+
+        // Set name and metadata
+        notebook.metadata["author"] = "Dnives Charting Engine";
+        notebook.metadata["tags"] = JSONValue(["charting", "visualization", "data-viz"]);
+
+        // Introduction Section
+        auto introSection = new NotebookSection("Charting Introduction", 1);
+        introSection.addCell(new NotebookCell(CellType.Markdown, 
+            "# Data Charting & Visualization\n\n" ~
+            "This notebook is optimized for creating visual representations of data. " ~
+            "It includes presets for common chart types and data structures used in Astroloper.\n\n" ~
+            "### Available Visualizers:\n" ~
+            "- **Line Charts** - For temporal data\n" ~
+            "- **Radial Charts** - For cyclical/astro data\n" ~
+            "- **Bar Charts** - For comparative analysis"));
+        notebook.addSection(introSection);
+
+        // Data Preparation Section
+        auto dataSection = new NotebookSection("Data Preparation", 2);
+        dataSection.addCell(new NotebookCell(CellType.Code, 
+            "import std.stdio;\nimport std.algorithm;\n\n" ~
+            "void main() {\n" ~
+            "    // Sample data for charting\n" ~
+            "    auto data = [10, 25, 15, 30, 20];\n" ~
+            "    writeln(\"Data prepared for visualization: \", data);\n" ~
+            "}"));
+        notebook.addSection(dataSection);
+
+        // Visualization Section
+        auto vizSection = new NotebookSection("Visualization", 2);
+        vizSection.addCell(new NotebookCell(CellType.Code, 
+            "// TODO: Integrate with dcore.viz for rendering\n" ~
+            "void main() {\n" ~
+            "    writeln(\"🚀 Rendering chart...\");\n" ~
+            "}"));
+        notebook.addSection(vizSection);
 
         return notebook;
     }

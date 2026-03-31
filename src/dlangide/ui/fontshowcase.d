@@ -18,7 +18,7 @@ class FontShowcaseWidget : VerticalLayout {
         backgroundColor = 0x202020; // Dark background
 
         // Title
-        addChild((new TextWidget(null, "Font Showcase"d)).fontSize(20).fontWeight(700).margin(Rect(0, 0, 0, 10)));
+        addChild((new TextWidget(null, "Font Showcase"d)).fontSize(20).fontWeight(700).margins(Rect(0, 0, 0, 10)));
 
         // Scrollable list of fonts
         ScrollWidget scroll = new ScrollWidget("FONT_SCROLLER");
@@ -29,7 +29,7 @@ class FontShowcaseWidget : VerticalLayout {
         FontFaceProps[] faces = FontManager.instance.getFaces();
         foreach(face; faces) {
             VerticalLayout item = new VerticalLayout(null);
-            item.layoutWidth(FILL_PARENT).padding(Rect(10, 10, 10, 10)).margin(Rect(0, 2, 0, 2));
+            item.layoutWidth(FILL_PARENT).padding(Rect(10, 10, 10, 10)).margins(Rect(0, 2, 0, 2));
             item.backgroundColor = 0x303030;
 
             // Font Name

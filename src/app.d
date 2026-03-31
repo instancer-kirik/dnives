@@ -181,6 +181,19 @@ extern (C) int UIAppMain(string[] args)
                 frame.isOpenedWorkspace(true);
             }
 
+            // Handle --charting flag
+            bool chartingMode = false;
+            foreach (arg; args) {
+                if (arg == "--charting") {
+                    chartingMode = true;
+                    break;
+                }
+            }
+
+            if (chartingMode) {
+                frame.handleAction(ACTION_FILE_NEW_CHARTING_NOTEBOOK.clone());
+            }
+
             // Open home screen tab if no workspace opened
             if (!frame.isOpenedWorkspace)
                 frame.showHomeScreen();

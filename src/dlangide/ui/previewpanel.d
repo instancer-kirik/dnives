@@ -27,20 +27,20 @@ class PreviewPanelWidget : VerticalLayout {
         // Frame
         _deviceFrame = new VerticalLayout("DEVICE_FRAME");
         _deviceFrame.layoutWidth(360).layoutHeight(640); // Phone size
-        _deviceFrame.margin(Rect(Auto, 20, Auto, 20)); // Center it
+        _deviceFrame.margins(Rect(40, 20, 40, 20)); // Centered margins
         _deviceFrame.backgroundColor = 0x000000;
         _deviceFrame.padding(Rect(15, 60, 15, 60)); // Simulated bezel
 
         // Bezel circles (simulated)
-        _deviceFrame.addChild((new TextWidget(null, "●"d)).margin(Rect(Auto, -45, Auto, 0)).textColor(0x333333));
+        _deviceFrame.addChild((new TextWidget(null, "●"d)).margins(Rect(20, -45, 20, 0)).textColor(0x333333));
 
         _previewContent = new VerticalLayout("PREVIEW_CONTENT");
         _previewContent.layoutWidth(FILL_PARENT).layoutHeight(FILL_PARENT);
         _previewContent.backgroundColor = 0xEEEEEE;
         
         // Sample content for now
-        _previewContent.addChild((new TextWidget(null, "Mobile App Preview"d)).fontSize(24).margin(Rect(20, 40, 20, 10)));
-        _previewContent.addChild((new TextWidget(null, "This panel allows you to preview your UI layouts in a mobile-like frame."d)).fontSize(14).margin(Rect(20, 0, 20, 0)));
+        _previewContent.addChild((new TextWidget(null, "Mobile App Preview"d)).fontSize(24).margins(Rect(20, 40, 20, 10)));
+        _previewContent.addChild((new TextWidget(null, "This panel allows you to preview your UI layouts in a mobile-like frame."d)).fontSize(14).margins(Rect(20, 0, 20, 0)));
 
         _deviceFrame.addChild(_previewContent);
 
