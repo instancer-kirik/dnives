@@ -843,20 +843,49 @@ class ChatWidget : HorizontalLayout {
         auto contentWidget = createMessageContentWidget(message);
         messageLayout.addChild(contentWidget);
 
-        // Message actions (for assistant messages)
-        if (message.role == AIMessage.Role.Assistant && !message.content.empty) {
+        // Message actions
+        if (!message.content.empty) {
             auto actionsLayout = new HorizontalLayout("MSG_ACTIONS_" ~ message.id);
             actionsLayout.layoutWidth(FILL_PARENT).layoutHeight(WRAP_CONTENT);
+            actionsLayout.padding(Rect(0, 5, 0, 0));
 
-            auto copyButton = new Button("COPY_" ~ message.id, "Copy");
+            auto copyButton = new Button("COPY_ALL_" ~ message.id, "Copy All");
+            copyButton.fontSize = 10;
             copyButton.click = delegate(Widget source) {
                 platform.setClipboardText(message.content.to!dstring);
                 return true;
             };
             actionsLayout.addChild(copyButton);
 
-            if (hasCodeBlocks(message.content)) {
+            auto copyBlockedButton = new Button("COPY_BLOCKED_" ~ message.id, "Copy Blocked");
+            copyBlockedButton.fontSize = 10;
+            copyBlockedButton.click = delegate(Widget source) {
+                auto contentLayout = _chatContainer.childById("CONTENT_LAYOUT_" ~ message.id);
+                if (auto container = cast(VerticalLayout)contentLayout) {
+                    string allBlockedText;
+                    // Iterate over all block layouts
+                    for (int i = 0; i < container.childCount; i++) {
+                        if (auto blockLayout = cast(VerticalLayout)container.child(i)) {
+                            // The MessageEditBox is the second child (index 1) in our blockLayout
+                            // (index 0 is the header with Copy button)
+                            if (blockLayout.childCount > 1) {
+                                if (auto editBox = cast(MessageEditBox)blockLayout.child(1)) {
+                                    allBlockedText ~= editBox.getBlockedText();
+                                }
+                            }
+                        }
+                    }
+                    if (!allBlockedText.empty) {
+                        platform.setClipboardText(allBlockedText.to!dstring);
+                    }
+                }
+                return true;
+            };
+            actionsLayout.addChild(copyBlockedButton);
+
+            if (message.role == AIMessage.Role.Assistant && hasCodeBlocks(message.content)) {
                 auto applyButton = new Button("APPLY_" ~ message.id, "Apply Code");
+                applyButton.fontSize = 10;
                 applyButton.click = delegate(Widget source) {
                     applyCodeFromMessage(message);
                     return true;
@@ -890,46 +919,175 @@ class ChatWidget : HorizontalLayout {
     }
 
     /**
+     * Specialized EditBox for chat messages that supports line blocking
+     */
+    class MessageEditBox : EditBox {
+        private bool[] _blockedLines;
+        private uint _blockedLineColor = 0x40555555; // Subtle highlight for blocked lines
+
+        this(string ID) {
+            super(ID);
+            showLineNumbers = true;
+            readOnly = true;
+        }
+
+        void toggleLineBlock(int lineIndex) {
+            if (lineIndex < 0) return;
+            if (lineIndex >= _blockedLines.length) {
+                _blockedLines.length = lineIndex + 1;
+            }
+            _blockedLines[lineIndex] = !_blockedLines[lineIndex];
+            invalidate();
+        }
+
+        bool isLineBlocked(int lineIndex) const {
+            if (lineIndex >= 0 && lineIndex < _blockedLines.length)
+                return _blockedLines[lineIndex];
+            return false;
+        }
+
+        string getBlockedText() const {
+            string result;
+            auto lines = text.toUTF8().split('\n');
+            foreach(i, line; lines) {
+                if (isLineBlocked(cast(int)i)) {
+                    result ~= line ~ "\n";
+                }
+            }
+            return result;
+        }
+
+        override protected void drawLineBackground(DrawBuf buf, int lineIndex, Rect lineRect, Rect visibleRect) {
+            if (isLineBlocked(lineIndex)) {
+                buf.fillRect(lineRect, _blockedLineColor);
+            }
+            super.drawLineBackground(buf, lineIndex, lineRect, visibleRect);
+        }
+
+        override protected bool handleLeftPaneIconsMouseClick(MouseEvent event, Rect rc, int line) {
+            if (event.button == MouseButton.Left) {
+                toggleLineBlock(line);
+                return true;
+            }
+            return super.handleLeftPaneIconsMouseClick(event, rc, line);
+        }
+    }
+
+    /**
      * Create content widget for a message
      */
     private Widget createMessageContentWidget(ChatMessage message) {
-        auto contentBox = new EditBox("CONTENT_" ~ message.id);
-        contentBox.layoutWidth(FILL_PARENT).layoutHeight(WRAP_CONTENT);
-        contentBox.readOnly = true;
-        contentBox.text = message.content.to!dstring;
-        contentBox.fontFamily = FontFamily.MonoSpace;
-        contentBox.fontSize = 12;
+        auto contentLayout = new VerticalLayout("CONTENT_LAYOUT_" ~ message.id);
+        contentLayout.layoutWidth(FILL_PARENT).layoutHeight(WRAP_CONTENT);
 
-        // Style based on role
-        switch (message.role) {
-            case AIMessage.Role.User:
-                contentBox.backgroundColor = 0x2D2D2D;
-                break;
-            case AIMessage.Role.Assistant:
-                contentBox.backgroundColor = 0x1E2A38;
-                break;
-            case AIMessage.Role.System:
-                contentBox.backgroundColor = 0x2A1E1E;
-                break;
-            default:
-                contentBox.backgroundColor = 0x252525;
-                break;
+        renderMessageBlocks(contentLayout, message.content, message.id, message.role);
+
+        return contentLayout;
+    }
+
+    /**
+     * Render message content as a series of blocks
+     */
+    private void renderMessageBlocks(VerticalLayout container, string content, string messageId, AIMessage.Role role) {
+        container.removeAllChildren();
+
+        auto lines = content.split('\n');
+        string currentBlock;
+        bool inCodeBlock = false;
+        int blockCount = 0;
+
+        void flushBlock() {
+            if (currentBlock.empty && !inCodeBlock) return;
+            
+            string blockId = format("BLOCK_%s_%d", messageId, blockCount++);
+            auto blockWidget = createBlockWidget(currentBlock, blockId, inCodeBlock, role);
+            container.addChild(blockWidget);
+            currentBlock = "";
         }
 
-        return contentBox;
+        foreach (line; lines) {
+            if (line.startsWith("```")) {
+                flushBlock();
+                inCodeBlock = !inCodeBlock;
+                if (!inCodeBlock) {
+                    // We just finished a code block, the opening/closing ``` are not part of content
+                }
+            } else {
+                currentBlock ~= line ~ "\n";
+            }
+        }
+        flushBlock();
+    }
+
+    /**
+     * Create a widget for a single block of message content
+     */
+    private Widget createBlockWidget(string content, string blockId, bool isCode, AIMessage.Role role) {
+        auto blockLayout = new VerticalLayout(blockId ~ "_LAYOUT");
+        blockLayout.layoutWidth(FILL_PARENT).layoutHeight(WRAP_CONTENT);
+        blockLayout.padding(Rect(0, 2, 0, 2));
+
+        auto header = new HorizontalLayout(blockId ~ "_HEADER");
+        header.layoutWidth(FILL_PARENT).layoutHeight(WRAP_CONTENT);
+        header.visibility = Visibility.Gone; // Show on hover maybe?
+
+        auto spacer = new Widget();
+        spacer.layoutWidth(FILL_PARENT).layoutWeight(1);
+        header.addChild(spacer);
+
+        auto copyBtn = new Button(blockId ~ "_COPY", "Copy");
+        copyBtn.fontSize = 9;
+        copyBtn.click = delegate(Widget source) {
+            platform.setClipboardText(content.to!dstring);
+            return true;
+        };
+        header.addChild(copyBtn);
+        blockLayout.addChild(header);
+
+        auto contentBox = new MessageEditBox(blockId);
+        contentBox.layoutWidth(FILL_PARENT).layoutHeight(WRAP_CONTENT);
+        contentBox.text = content.to!dstring;
+        contentBox.fontFamily = FontFamily.MonoSpace;
+        contentBox.fontSize = 12;
+        contentBox.readOnly = true;
+
+        if (isCode) {
+            contentBox.backgroundColor = 0x111111;
+        } else {
+            // Style based on role
+            switch (role) {
+                case AIMessage.Role.User:
+                    contentBox.backgroundColor = 0x2D2D2D;
+                    break;
+                case AIMessage.Role.Assistant:
+                    contentBox.backgroundColor = 0x1E2A38;
+                    break;
+                case AIMessage.Role.System:
+                    contentBox.backgroundColor = 0x2A1E1E;
+                    break;
+                default:
+                    contentBox.backgroundColor = 0x252525;
+                    break;
+            }
+        }
+
+        blockLayout.addChild(contentBox);
+
+        // Add "Copy" button to the block layout footer instead of header for better visibility
+        if (!content.empty) {
+            header.visibility = Visibility.Visible;
+        }
+
+        return blockLayout;
     }
 
     /**
      * Update message display during streaming
      */
     private void updateMessageDisplay(ChatMessage message) {
-        auto messageWidget = _chatContainer.childById("CONTENT_" ~ message.id);
-        if (auto editBox = cast(EditBox)messageWidget) {
-            editBox.text = message.content.to!dstring;
-            if (message.isStreaming) {
-                // Note: text property is read-only in dlangui 0.10.8
-                // Would need to use different approach for cursor indicator
-            }
+        auto container = cast(VerticalLayout)_chatContainer.childById("CONTENT_LAYOUT_" ~ message.id);
+        if (container) {
+            renderMessageBlocks(container, message.content, message.id, message.role);
         }
     }
 
