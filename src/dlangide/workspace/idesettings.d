@@ -343,4 +343,61 @@ class IDESettings : SettingsFile {
     @property Setting uiState() {
         return _setting.objectByPath("uiState", true);
     }
+
+    // -----------------------------------------------------------------------
+    // AI settings
+    // -----------------------------------------------------------------------
+
+    @property Setting aiSettings() {
+        return _setting.objectByPath("ai", true);
+    }
+
+    @property string aiDefaultBackend() {
+        return aiSettings.getString("default_backend", "openai");
+    }
+    @property void aiDefaultBackend(string v) {
+        aiSettings.setString("default_backend", v);
+    }
+
+    @property string aiOpenAIKey() {
+        return aiSettings.getString("openai_api_key", "");
+    }
+    @property void aiOpenAIKey(string v) {
+        aiSettings.setString("openai_api_key", v);
+    }
+
+    @property string aiOpenAIModel() {
+        return aiSettings.getString("openai_model", "gpt-4o");
+    }
+    @property void aiOpenAIModel(string v) {
+        aiSettings.setString("openai_model", v);
+    }
+
+    @property string aiAnthropicKey() {
+        return aiSettings.getString("anthropic_api_key", "");
+    }
+    @property void aiAnthropicKey(string v) {
+        aiSettings.setString("anthropic_api_key", v);
+    }
+
+    @property string aiAnthropicModel() {
+        return aiSettings.getString("anthropic_model", "claude-3-5-sonnet-20241022");
+    }
+    @property void aiAnthropicModel(string v) {
+        aiSettings.setString("anthropic_model", v);
+    }
+
+    @property string aiOllamaBaseUrl() {
+        return aiSettings.getString("ollama_base_url", "http://localhost:11434");
+    }
+    @property void aiOllamaBaseUrl(string v) {
+        aiSettings.setString("ollama_base_url", v);
+    }
+
+    @property string aiOllamaModel() {
+        return aiSettings.getString("ollama_model", "llama3");
+    }
+    @property void aiOllamaModel(string v) {
+        aiSettings.setString("ollama_model", v);
+    }
 }

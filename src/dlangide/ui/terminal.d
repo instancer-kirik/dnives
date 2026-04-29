@@ -352,25 +352,26 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
     protected ScrollBar _verticalScrollBar;
     protected TerminalContent _content;
     protected TerminalDevice _device;
+    protected bool _interactive;
     this() {
-        this(null);
+        this(null, false);
     }
-    this(string ID) {
+    this(string ID, bool interactive = false) {
         super(ID);
+        _interactive = interactive;
         styleId = "TERMINAL";
-        focusable = true;
+        focusable = interactive;
         _verticalScrollBar = new ScrollBar("VERTICAL_SCROLLBAR", Orientation.Vertical);
         _verticalScrollBar.minValue = 0;
         _verticalScrollBar.scrollEvent = this;
         addChild(_verticalScrollBar);
         _device = new TerminalDevice();
         TerminalWidget _this = this;
-        if (_device.create()) {
+        if (_device.create(interactive)) {
             _device.onBytesRead = delegate (string data) {
                 import dlangui.platforms.common.platform;
                 Window w = window;
                 if (w) {
-                    //w.exe
                     w.executeInUiThread(delegate() {
                         if (w.isChild(_this)) {
                             write(data);
@@ -487,7 +488,7 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
                 case KeyCode.TAB:
                     return handleTextInput("\t");
                 case KeyCode.BACK:
-                    return handleTextInput("\t");
+                    return handleTextInput("\x7f");
                 case KeyCode.F1:
                     return handleTextInput("\x1bO" ~ flagsstr3 ~ "P");
                 case KeyCode.F2:
@@ -850,10 +851,12 @@ class TerminalDevice : Thread {
         HANDLE hpipe;
     } else {
         int masterfd;
-        import core.sys.posix.fcntl: open_=open, O_WRONLY;
+        int slavefd = -1; // kept open to prevent EIO on master read
+        import core.sys.posix.fcntl: open_=open, O_WRONLY, O_RDWR, O_NOCTTY;
         import core.sys.posix.unistd: close_=close;
         import core.sys.posix.unistd: write_=write;
         import core.sys.posix.unistd: read_=read;
+        private int _shellPid = -1;
     }
     @property string deviceName() { return _name; }
     private string _name;
@@ -916,13 +919,28 @@ class TerminalDevice : Thread {
             }
         } else {
             // posix
+            import core.stdc.errno : errno, EAGAIN, EINTR, EIO;
             char[4096] buf;
             while(!closed) {
                 auto bytesRead = read_(masterfd, buf.ptr, buf.length);
                 if (closed)
                     break;
-                if (bytesRead > 0 && onBytesRead.assigned) {
-                    onBytesRead(buf[0 .. bytesRead].dup);
+                if (bytesRead > 0) {
+                    if (onBytesRead.assigned)
+                        onBytesRead(buf[0 .. bytesRead].dup);
+                } else if (bytesRead == 0) {
+                    break; // EOF
+                } else {
+                    int err = errno;
+                    if (err == EINTR || err == EAGAIN) {
+                        // retry
+                        import core.thread : Thread;
+                        import core.time : msecs;
+                        Thread.sleep(msecs(10));
+                        continue;
+                    }
+                    // EIO or other error — slave closed or not attached
+                    break;
                 }
             }
         }
@@ -960,6 +978,9 @@ class TerminalDevice : Thread {
         if (closed)
             return;
         closed = true;
+        version (Posix) {
+            killShell();
+        }
         if (!started)
             return;
         version (Windows) {
@@ -980,11 +1001,14 @@ class TerminalDevice : Thread {
                 CloseHandle(h);
             }
         } else {
+            // Close both fds to unblock the read() in threadProc (returns EIO)
+            if (slavefd != -1) {
+                close_(slavefd);
+                slavefd = -1;
+            }
             if (masterfd && masterfd != -1) {
-                import std.string;
-                int clientfd = open_(_name.toStringz, O_WRONLY);
-                write_(clientfd, "1".ptr, 1);
-                close_(clientfd);
+                close_(masterfd);
+                masterfd = 0;
             }
         }
         join(false);
@@ -993,15 +1017,91 @@ class TerminalDevice : Thread {
                 CloseHandle(hpipe);
                 hpipe = null;
             }
-        } else {
-            if (masterfd && masterfd != -1) {
-                close_(masterfd);
-                masterfd = 0;
-            }
         }
             _name = null;
     }
-    bool create() {
+    version (Posix) {
+        /// Spawn a shell process on the slave PTY.
+        /// Returns false if fork/exec failed.
+        bool spawnShell() {
+            import core.sys.posix.unistd : fork, setsid, dup2, execv, _exit;
+            import core.sys.posix.fcntl : open_c = open, O_RDWR, O_NOCTTY;
+            import core.sys.posix.sys.ioctl : ioctl, TIOCSCTTY;
+            import core.stdc.stdlib : getenv;
+            import core.sys.posix.stdlib : setenv;
+            import core.sys.posix.unistd : close_c = close;
+            import core.memory : GC;
+            import std.string : toStringz;
+
+            // Resolve shell path before forking — avoids D allocations in child
+            const(char)* userShell = getenv("SHELL");
+            const(char)* shell = (userShell && *userShell) ? userShell : "/bin/bash";
+            immutable(char)* slaveName = _name.toStringz;
+
+            // Disable GC around fork to prevent the child from corrupting the GC state
+            GC.disable();
+            auto pid = fork();
+            if (pid != 0)
+                GC.enable(); // re-enable in parent immediately
+
+            if (pid < 0)
+                return false;
+
+            if (pid == 0) {
+                // ── Child process ──────────────────────────────────────
+                // ONLY async-signal-safe / C calls from here on.
+                // Do NOT call any D runtime, GC, or logging functions.
+
+                setsid();
+
+                // Open slave WITHOUT O_NOCTTY so it becomes controlling terminal
+                int slavefd_c = open_c(slaveName, O_RDWR);
+                if (slavefd_c < 0)
+                    _exit(1);
+
+                // Make slave the controlling terminal (required by fish and other shells)
+                ioctl(slavefd_c, TIOCSCTTY, 0);
+
+                dup2(slavefd_c, 0);
+                dup2(slavefd_c, 1);
+                dup2(slavefd_c, 2);
+                if (slavefd_c > 2)
+                    close_c(slavefd_c);
+
+                // Close parent's slave and master fds in child
+                if (slavefd != -1)
+                    close_c(slavefd);
+                close_c(masterfd);
+
+                setenv("TERM", "xterm-256color", 1);
+
+                const(char)*[2] args = [shell, null];
+                execv(shell, args.ptr);
+
+                const(char)* sh = "/bin/sh";
+                const(char)*[2] args2 = [sh, null];
+                execv(sh, args2.ptr);
+
+                _exit(127);
+                assert(0);
+            }
+
+            // ── Parent ─────────────────────────────────────────────────
+            _shellPid = pid;
+            Log.i("TerminalDevice: spawned shell pid=", pid, " on ", _name);
+            return true;
+        }
+
+        void killShell() {
+            if (_shellPid > 0) {
+                import core.sys.posix.signal : kill, SIGHUP;
+                kill(_shellPid, SIGHUP);
+                _shellPid = -1;
+            }
+        }
+    }
+
+    bool create(bool interactive = false) {
         import std.string;
         version (Windows) {
             import std.uuid;
@@ -1049,9 +1149,15 @@ class TerminalDevice : Thread {
                 }
             }
             _name = fromStringz(s).dup;
+            // Open slave side to prevent master read() returning EIO immediately
+            slavefd = open_(_name.toStringz, O_RDWR | O_NOCTTY);
         }
         Log.i("ptty device created: ", _name);
         start();
+        version (Posix) {
+            if (interactive)
+                spawnShell();
+        }
         return true;
     }
 }

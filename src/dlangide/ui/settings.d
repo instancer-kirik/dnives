@@ -184,6 +184,27 @@ SettingsPage createSettingsPages() {
     gdctoolchain.addExecutableFileNameEdit("dlang/toolchains/gdc/executable", UIString.fromId("OPTION_GDC_EXECUTABLE"c), "gdc");
     gdctoolchain.addStringEdit("dlang/toolchains/gdc/dub_additional_params", UIString.fromId("OPTION_DUB_ADDITIONAL_PARAMS"c), "");
 
+    // AI settings page
+    SettingsPage ai = res.addChild("ai", UIString.fromRaw("AI"d));
+
+    SettingsPage aiGeneral = ai.addChild("ai/general", UIString.fromRaw("General"d));
+    aiGeneral.addStringComboBox("ai/default_backend", UIString.fromRaw("Default backend"d), [
+            StringListValue("openai",    "OpenAI"d),
+            StringListValue("anthropic", "Anthropic"d),
+            StringListValue("ollama",    "Ollama (local)"d)]);
+
+    SettingsPage aiOpenAI = ai.addChild("ai/openai", UIString.fromRaw("OpenAI"d));
+    aiOpenAI.addStringEdit("ai/openai_api_key",  UIString.fromRaw("API key"d),    "");
+    aiOpenAI.addStringEdit("ai/openai_model",    UIString.fromRaw("Model"d),      "gpt-4o");
+
+    SettingsPage aiAnthropic = ai.addChild("ai/anthropic", UIString.fromRaw("Anthropic"d));
+    aiAnthropic.addStringEdit("ai/anthropic_api_key", UIString.fromRaw("API key"d), "");
+    aiAnthropic.addStringEdit("ai/anthropic_model",   UIString.fromRaw("Model"d),   "claude-3-5-sonnet-20241022");
+
+    SettingsPage aiOllama = ai.addChild("ai/ollama", UIString.fromRaw("Ollama"d));
+    aiOllama.addStringEdit("ai/ollama_base_url", UIString.fromRaw("Base URL"d), "http://localhost:11434");
+    aiOllama.addStringEdit("ai/ollama_model",    UIString.fromRaw("Model"d),    "llama3");
+
     return res;
 }
 

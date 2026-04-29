@@ -201,6 +201,8 @@ class AIManager {
         // Simplified dock window creation - avoid API compatibility issues
         try {
             _chatDock = new DockWindow("AI_CHAT");
+            _chatDock.dockAlignment = DockAlignment.Right;
+            _chatDock.layoutWidth = 520;
             _chatDock.bodyWidget = _chatWidget;
             dockHost.addDockedWindow(_chatDock);
         } catch (Exception e) {

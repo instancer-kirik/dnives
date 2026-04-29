@@ -86,7 +86,8 @@ class HSplitter : HorizontalLayout {
     override bool onMouseEvent(MouseEvent event) {
         if (childCount != 2) return super.onMouseEvent(event);
 
-        int splitterLeft = _pos.left + _splitterPosition;
+        // Mouse coordinates are relative to this widget, so use _splitterPosition directly
+        int splitterLeft = _splitterPosition;
         int splitterRight = splitterLeft + SPLITTER_WIDTH;
 
         if (event.action == MouseAction.ButtonDown && event.button == MouseButton.Left) {
@@ -203,7 +204,8 @@ class VSplitter : VerticalLayout {
     override bool onMouseEvent(MouseEvent event) {
         if (childCount != 2) return super.onMouseEvent(event);
 
-        int splitterTop = _pos.top + _splitterPosition;
+        // Mouse coordinates are relative to this widget, so use _splitterPosition directly
+        int splitterTop = _splitterPosition;
         int splitterBottom = splitterTop + SPLITTER_HEIGHT;
 
         if (event.action == MouseAction.ButtonDown && event.button == MouseButton.Left) {

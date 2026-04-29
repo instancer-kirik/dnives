@@ -61,6 +61,9 @@ class AIIntegration {
     private DockWindow _aiChatDock;
     private bool _isInitialized = false;
 
+    /// Wire this from IDEFrame to call showPreferences() when the user clicks "API Keys"
+    void delegate() onShowPreferences;
+
     /**
      * Constructor
      */
@@ -182,6 +185,11 @@ class AIIntegration {
 
         // Capture the dock window the manager just created so our guard works
         _aiChatDock = _aiManager.chatDock;
+
+        // Wire the "API Keys" button in the chat widget to open IDE preferences
+        auto chatWidget = _aiManager.getChatWidget();
+        if (chatWidget && onShowPreferences)
+            chatWidget.onOpenSettings = onShowPreferences;
 
         Log.i("AIIntegration: Created AI chat dock in external host");
     }
@@ -670,6 +678,39 @@ class AIIntegration {
     private void refreshEditorFile(string filePath) {
         // Would refresh/reload specific editor file
         Log.i("AIIntegration: Would refresh editor file: ", filePath);
+    }
+
+    /**
+     * Apply a new AI configuration derived from IDE settings.
+     * Pass a JSONValue with the same layout as ai_config.json.
+     * Safe to call at any time after initialize().
+     */
+    void applySettings(JSONValue config) {
+        if (!_isInitialized || !_aiManager) return;
+
+        auto cfg = _aiManager.getConfiguration();
+
+        if ("default_backend" in config && config["default_backend"].type == JSONType.string)
+            cfg.defaultBackend = config["default_backend"].str;
+
+        if ("openai" in config && config["openai"].type == JSONType.object)
+            cfg.openaiConfig = config["openai"];
+
+        if ("anthropic" in config && config["anthropic"].type == JSONType.object)
+            cfg.anthropicConfig = config["anthropic"];
+
+        if ("ollama" in config && config["ollama"].type == JSONType.object)
+            cfg.ollamaConfig = config["ollama"];
+
+        _aiManager.updateConfiguration(cfg);
+
+        // Re-populate the backend selector in the chat widget so the combo
+        // reflects any newly-configured backends immediately.
+        auto chatWidget = _aiManager.getChatWidget();
+        if (chatWidget)
+            chatWidget.populateBackendSelector();
+
+        Log.i("AIIntegration: Applied updated AI settings");
     }
 
     /**

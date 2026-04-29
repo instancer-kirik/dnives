@@ -71,4 +71,13 @@
         textColor="#585B70"
     />
 
+    <!-- ── Terminal ──────────────────────────────────────────── -->
+    <style id="TERMINAL"
+        backgroundColor="#1E1E2E"
+        textColor="#CDD6F4"
+        fontFace="DejaVu Sans Mono,Monospace,Courier New"
+        fontFamily="Monospace"
+        fontSize="14"
+    />
+
 </theme>

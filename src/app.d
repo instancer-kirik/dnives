@@ -204,14 +204,13 @@ extern (C) int UIAppMain(string[] args)
             // Restore UI state
             frame.restoreUIStateOnStartup();
 
-            // Show brief auto-closing DCore status popups now that the window is live
+            // Log DCore integration status (popups removed - use status bar instead)
             if (dcoreReady)
             {
                 auto integration = getDCoreIntegration();
                 if (integration)
                 {
-                    integration.showStatus();
-                    integration.runDCoreTest();
+                    Log.i("DCore Integration: Ready");
                 }
             }
 

@@ -707,14 +707,60 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
             // Create new terminal widget
             import dlangide.ui.terminal;
 
-            auto terminalWidget = new TerminalWidget("TERMINAL_WIDGET");
+            auto terminalWidget = new TerminalWidget("TERMINAL_WIDGET", true);
+
+            // --- Project picker toolbar ---
+            auto terminalContainer = new VerticalLayout("TERMINAL_CONTAINER");
+            terminalContainer.layoutWidth(FILL_PARENT).layoutHeight(FILL_PARENT);
+
+            auto toolbar = new HorizontalLayout("TERMINAL_TOOLBAR");
+            toolbar.layoutWidth(FILL_PARENT).layoutHeight(WRAP_CONTENT);
+            toolbar.padding(Rect(4, 2, 4, 2));
+
+            auto lbl = new TextWidget("TERMINAL_PROJECT_LABEL", "Project: "d);
+            lbl.fontSize = 11;
+            toolbar.addChild(lbl);
+
+            // Build project name list from the current workspace
+            dstring[] projectNames = ["(workspace dir)"d];
+            string[] projectDirs  = [""]; // empty == use workspace root
+            if (currentWorkspace) {
+                foreach (p; currentWorkspace.projects) {
+                    import std.path : dirName;
+                    projectNames ~= p.name;
+                    projectDirs  ~= p.filename.length ? dirName(p.filename) : "";
+                }
+            }
+
+            auto projectCombo = new ComboBox("TERMINAL_PROJECT_COMBO", projectNames);
+            projectCombo.selectedItemIndex = 0;
+            projectCombo.layoutWidth(300);
+            projectCombo.fontSize = 11;
+            projectCombo.tooltipText = "cd into selected project directory"d;
+            projectCombo.itemClick = delegate(Widget source, int index) {
+                if (index >= 0 && index < cast(int)projectDirs.length) {
+                    string dir = projectDirs[index];
+                    if (dir.length == 0 && currentWorkspace)
+                        dir = currentWorkspace.dir;
+                    if (dir.length) {
+                        import std.path : buildNormalizedPath;
+                        string cdCmd = "cd " ~ buildNormalizedPath(dir) ~ "\n";
+                        terminalWidget.write(cdCmd);
+                    }
+                }
+                return true;
+            };
+            toolbar.addChild(projectCombo);
+
+            terminalContainer.addChild(toolbar);
+            terminalContainer.addChild(terminalWidget);
 
             // Create dock window for terminal
             terminalDock = new DockWindow(TERMINAL_DOCK_ID);
             terminalDock.caption.text = "Terminal"d;
             terminalDock.dockAlignment = DockAlignment.Bottom;
-            terminalDock.layoutHeight = 200;
-            terminalDock.bodyWidget = terminalWidget;
+            terminalDock.layoutHeight = 220;
+            terminalDock.bodyWidget = terminalContainer;
 
             // Add terminal to dock host
             _dockHost.addDockedWindow(terminalDock);
@@ -1504,6 +1550,10 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
                 return null;
             }
         }
+
+        // Ensure the "API Keys" button in the chat widget opens our preferences dialog
+        if (!ai.onShowPreferences)
+            ai.onShowPreferences = &showPreferences;
 
         return ai;
     }
@@ -2444,6 +2494,33 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
     {
         _toolbarHost.visibility = _settings.showToolbar ? Visibility.Visible : Visibility.Gone;
         _statusLine.visibility = _settings.showStatusbar ? Visibility.Visible : Visibility.Gone;
+
+        // Push AI configuration to the AI integration if it is active
+        {
+            import std.json : JSONValue, JSONType;
+            auto aiInteg = resolveAI(false);
+            if (aiInteg) {
+                JSONValue aiCfg = JSONValue(cast(JSONValue[string])null);
+                aiCfg["default_backend"] = settings.aiDefaultBackend;
+
+                JSONValue openaiCfg = JSONValue(cast(JSONValue[string])null);
+                openaiCfg["api_key"] = settings.aiOpenAIKey;
+                openaiCfg["model"]   = settings.aiOpenAIModel;
+                aiCfg["openai"] = openaiCfg;
+
+                JSONValue anthropicCfg = JSONValue(cast(JSONValue[string])null);
+                anthropicCfg["api_key"] = settings.aiAnthropicKey;
+                anthropicCfg["model"]   = settings.aiAnthropicModel;
+                aiCfg["anthropic"] = anthropicCfg;
+
+                JSONValue ollamaCfg = JSONValue(cast(JSONValue[string])null);
+                ollamaCfg["base_url"] = settings.aiOllamaBaseUrl;
+                ollamaCfg["model"]    = settings.aiOllamaModel;
+                aiCfg["ollama"] = ollamaCfg;
+
+                aiInteg.applySettings(aiCfg);
+            }
+        }
         for (int i = _tabs.tabCount - 1; i >= 0; i--)
         {
             DSourceEdit ed = getSourceEdit(_tabs.tabBody(i));
