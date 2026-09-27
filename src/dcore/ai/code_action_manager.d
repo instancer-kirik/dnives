@@ -18,6 +18,7 @@ import core.time;
 import dlangui.core.logger;
 
 import dcore.core;
+import dcore.lang.language_profile;
 import dcore.ai.ai_manager;
 import dcore.lsp.lspmanager;
 import dcore.lsp.lsptypes;
@@ -703,8 +704,7 @@ class CodeActionManager {
      * Check if file is a source file
      */
     private bool isSourceFile(string filePath) {
-        string ext = extension(filePath).toLower();
-        return [".d", ".di", ".js", ".ts", ".py", ".rs", ".c", ".cpp", ".h", ".hpp"].canFind(ext);
+        return dcore.lang.language_profile.isSourceFile(filePath);
     }
 
     /**

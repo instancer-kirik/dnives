@@ -33,9 +33,12 @@ import dlangide.ui.dcore_integration;
 import dlangide.ui.commands : ACTION_AI_CHAT_TOGGLE, ACTION_AI_NEW_CONVERSATION, ACTION_AI_IMPORT_CHATGPT;
 import dlangide.ui.fontshowcase;
 import dlangide.ui.previewpanel;
+import dlangide.ui.filepanel;
+import dlangide.ui.symbolgraph;
 import dcore.widgets.filesystembrowser;
 import dcore.notebooks.notebook_manager;
 import dcore.notebooks.integration;
+import dcore.lang.language_profile;
 
 import dlangide.workspace.workspace;
 import dlangide.workspace.project;
@@ -61,12 +64,13 @@ immutable dstring DLANGIDE_VERSION = toUTF32(import("VERSION"));
 
 bool isSupportedSourceTextFileFormat(string filename)
 {
-    return (filename.endsWith(".d") || filename.endsWith(".di") || filename.endsWith(".dt") || filename.endsWith(".txt") || filename
-            .endsWith(".cpp") || filename.endsWith(".h") || filename.endsWith(".c")
-            || filename.endsWith(".json") || filename.endsWith(".sdl") || filename.endsWith(".dd") || filename.endsWith(".ddoc") || filename
-                .endsWith(".xml") || filename.endsWith(".html")
-            || filename.endsWith(".html") || filename.endsWith(".css") || filename.endsWith(".log") || filename
-                .endsWith(".hpp"));
+    import dcore.lang.language_profile : isSourceFile;
+    if (isSourceFile(filename)) return true;
+    // Additional plain-text formats the editor can always open
+    import std.algorithm : endsWith;
+    return filename.endsWith(".txt") || filename.endsWith(".log") ||
+           filename.endsWith(".xml") || filename.endsWith(".sdl") ||
+           filename.endsWith(".dd")  || filename.endsWith(".ddoc");
 }
 
 class BackgroundOperationWatcherTest : BackgroundOperationWatcher
@@ -105,6 +109,8 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
 
     MenuItem mainMenuItems;
     WorkspacePanel _wsPanel;
+    FilePanel _filePanel;
+    SymbolGraphPanel _symbolGraphPanel;
     OutputPanel _logPanel;
     DockHost _dockHost;
     TabWidget _tabs;
@@ -125,7 +131,7 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
     IDESettings _settings;
     ProgramExecution _execution;
 
-    dstring frameWindowCaptionSuffix = "Dnives"d;
+    dstring frameWindowCaptionSuffix = "DnivesNBlocksIDE"d;
 
     this(Window window)
     {
@@ -452,7 +458,7 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
 
     override protected void initialize()
     {
-        _appName = "dlangide";
+        _appName = "dnivesnblockside";
         //_editorTool = new DEditorTool(this);
         _settings = new IDESettings(buildNormalizedPath(settingsDir, "settings.json"));
         _settings.load();
@@ -614,6 +620,45 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         _wsPanel.activate();
     }
 
+    static immutable SYMBOL_GRAPH_DOCK_ID = "symbolGraphPanel";
+
+    /// Lazily resolve the SymbolTracker from the AI subsystem and inject it
+    /// into the symbol graph panel if it hasn't been set yet.
+    private void ensureSymbolTrackerWired()
+    {
+        if (!_symbolGraphPanel) return;
+        if (_symbolGraphPanel.hasTracker) return;
+        auto ai = resolveAI(false);
+        if (!ai) return;
+        auto mgr = ai.getAIManager();
+        if (!mgr) return;
+        auto tracker = mgr.getSymbolTracker();
+        if (tracker)
+            _symbolGraphPanel.tracker = tracker;
+    }
+
+    /// Show the symbol graph for all symbols in the given file.
+    void showSymbolGraphForFile(string filePath)
+    {
+        ensureSymbolTrackerWired();
+        if (_symbolGraphPanel) {
+            _symbolGraphPanel.showForFile(filePath);
+            _symbolGraphPanel.visibility = Visibility.Visible;
+            _symbolGraphPanel.setFocus();
+        }
+    }
+
+    /// Show the symbol graph centred on a fully-qualified symbol name.
+    void showSymbolGraphForSymbol(string fqn)
+    {
+        ensureSymbolTrackerWired();
+        if (_symbolGraphPanel) {
+            _symbolGraphPanel.showForSymbol(fqn);
+            _symbolGraphPanel.visibility = Visibility.Visible;
+            _symbolGraphPanel.setFocus();
+        }
+    }
+
     static immutable HOME_SCREEN_ID = "HOME_SCREEN";
     void showHomeScreen()
     {
@@ -704,67 +749,21 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         }
         else
         {
-            // Create new terminal widget
-            import dlangide.ui.terminal;
+            // Create new terminal panel
+            import dlangide.ui.terminalpanel;
 
-            auto terminalWidget = new TerminalWidget("TERMINAL_WIDGET", true);
-
-            // --- Project picker toolbar ---
-            auto terminalContainer = new VerticalLayout("TERMINAL_CONTAINER");
-            terminalContainer.layoutWidth(FILL_PARENT).layoutHeight(FILL_PARENT);
-
-            auto toolbar = new HorizontalLayout("TERMINAL_TOOLBAR");
-            toolbar.layoutWidth(FILL_PARENT).layoutHeight(WRAP_CONTENT);
-            toolbar.padding(Rect(4, 2, 4, 2));
-
-            auto lbl = new TextWidget("TERMINAL_PROJECT_LABEL", "Project: "d);
-            lbl.fontSize = 11;
-            toolbar.addChild(lbl);
-
-            // Build project name list from the current workspace
-            dstring[] projectNames = ["(workspace dir)"d];
-            string[] projectDirs  = [""]; // empty == use workspace root
-            if (currentWorkspace) {
-                foreach (p; currentWorkspace.projects) {
-                    import std.path : dirName;
-                    projectNames ~= p.name;
-                    projectDirs  ~= p.filename.length ? dirName(p.filename) : "";
-                }
-            }
-
-            auto projectCombo = new ComboBox("TERMINAL_PROJECT_COMBO", projectNames);
-            projectCombo.selectedItemIndex = 0;
-            projectCombo.layoutWidth(300);
-            projectCombo.fontSize = 11;
-            projectCombo.tooltipText = "cd into selected project directory"d;
-            projectCombo.itemClick = delegate(Widget source, int index) {
-                if (index >= 0 && index < cast(int)projectDirs.length) {
-                    string dir = projectDirs[index];
-                    if (dir.length == 0 && currentWorkspace)
-                        dir = currentWorkspace.dir;
-                    if (dir.length) {
-                        import std.path : buildNormalizedPath;
-                        string cdCmd = "cd " ~ buildNormalizedPath(dir) ~ "\n";
-                        terminalWidget.write(cdCmd);
-                    }
-                }
-                return true;
-            };
-            toolbar.addChild(projectCombo);
-
-            terminalContainer.addChild(toolbar);
-            terminalContainer.addChild(terminalWidget);
+            auto terminalPanel = new TerminalPanel();
 
             // Create dock window for terminal
             terminalDock = new DockWindow(TERMINAL_DOCK_ID);
             terminalDock.caption.text = "Terminal"d;
             terminalDock.dockAlignment = DockAlignment.Bottom;
             terminalDock.layoutHeight = 220;
-            terminalDock.bodyWidget = terminalContainer;
+            terminalDock.bodyWidget = terminalPanel;
 
             // Add terminal to dock host
             _dockHost.addDockedWindow(terminalDock);
-            terminalDock.setFocus();
+            terminalPanel.focusTerminal();
         }
     }
 
@@ -1001,6 +1000,9 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
 
         //=============================================================
         // Create workspace docked panel
+        // WorkspacePanel — kept in dock but hidden; FilePanel is the visible sidebar.
+        // Must remain docked so parent is non-null (activate/hide/selectItem all
+        // call parent.layout which crashes if parent is null).
         _wsPanel = new WorkspacePanel("workspace");
         _wsPanel.sourceFileSelectionListener = &onSourceFileSelected;
         _wsPanel.workspaceActionListener = &handleAction;
@@ -1008,9 +1010,36 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         _dockHost.addDockedWindow(_wsPanel);
         _wsPanel.visibility = Visibility.Gone;
 
+        // --- File Panel (new sidebar) ---
+        _filePanel = new FilePanel("filePanel");
+        _filePanel.dockAlignment = DockAlignment.Left;
+        _filePanel.layoutWidth = 240;
+        _filePanel.onFileOpen = delegate(string path) {
+            openSourceFile(path);
+            return true;
+        };
+        _filePanel.onFileReveal = delegate(string path) {
+            import std.process : browse;
+            import std.path : dirName;
+            browse(dirName(path));
+            return true;
+        };
+        _filePanel.onSymbolGraphRequest = delegate(string path) {
+            showSymbolGraphForFile(path);
+            return true;
+        };
+        _dockHost.addDockedWindow(_filePanel);
+
+        // --- Symbol Graph Panel ---
+        _symbolGraphPanel = new SymbolGraphPanel("symbolGraphPanel", null);
+        _symbolGraphPanel.dockAlignment = DockAlignment.Right;
+        _symbolGraphPanel.layoutWidth = 340;
+        _symbolGraphPanel.visibility = Visibility.Gone;
+        _dockHost.addDockedWindow(_symbolGraphPanel);
+
         _logPanel = new OutputPanel("output");
         _logPanel.compilerLogIssueClickHandler = &onCompilerLogIssueClick;
-        _logPanel.appendText(null, "DlangIDE is started\nHINT: Try to open some DUB project\n"d);
+        _logPanel.appendText(null, "DnivesNBlocksIDE is started\nHINT: Try to open some DUB project\n"d);
         dumpCompilerPaths();
 
         _dockHost.addDockedWindow(_logPanel);
@@ -1648,9 +1677,7 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
                 //debug {
                 //    testDCDFailAfterThreadCreation();
                 //}
-                dstring msg = "DLangIDE\n(C) Vadim Lopatin, 2014-2017\nhttp://github.com/buggins/dlangide\n"
-                    ~ "IDE for D programming language written in D\nUses DlangUI library "
-                    ~ DLANGUI_VERSION ~ " for GUI"d;
+                dstring msg = "DnivesNBlocksIDE\nBuilt on DlangIDE by Vadim Lopatin, 2014-2017\nhttp://github.com/buggins/dlangide\nMulti-language code IDE with AI assistant\nUses DlangUI library "d ~ DLANGUI_VERSION;
                 window.showMessageBox(UIString.fromId("ABOUT"c) ~ " " ~ DLANGIDE_VERSION,
                     UIString.fromRaw(msg));
                 return true;
@@ -2719,7 +2746,7 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
             if (!loadProject(project))
             {
                 //window.showMessageBox(UIString.fromId("MSG_OPEN_PROJECT"c), UIString.fromId("ERROR_INVALID_WS_OR_PROJECT_FILE"c));
-                //_logPanel.logLine("File is not recognized as DlangIDE project or workspace file");
+                //_logPanel.logLine("File is not recognized as DnivesNBlocksIDE project or workspace file");
                 return;
             }
             string defWsFile = project.defWorkspaceFile;
@@ -2925,7 +2952,7 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         }
         else
         {
-            _logPanel.logLine("File is not recognized as DlangIDE project or workspace file");
+            _logPanel.logLine("File is not recognized as DnivesNBlocksIDE project or workspace file");
             window.showMessageBox(UIString.fromId("ERROR_INVALID_WORKSPACE_FILE"c), UIString.fromId(
                     "ERROR_INVALID_WS_OR_PROJECT_FILE"c));
         }
@@ -2970,6 +2997,8 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         closeAllDocuments();
         currentWorkspace = ws;
         _wsPanel.workspace = ws;
+        if (_filePanel && ws)
+            _filePanel.workspace = ws;
         requestActionsUpdate();
         // Open main file for project
         if (ws && ws.startupProject && ws.startupProject.mainSourceFile

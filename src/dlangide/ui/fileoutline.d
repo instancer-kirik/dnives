@@ -29,6 +29,7 @@ import std.datetime;
 import std.format;
 
 import dcore.editor.document;
+import dcore.lang.language_profile;
 import dlangide.ui.inlinediffeditor;
 
 /// Represents a symbol in the file outline
@@ -88,7 +89,9 @@ struct OutlineConfig {
     bool showParameters = true;
     bool showReturnTypes = true;
     bool highlightChanges = true;
-    string[] languageExtensions = [".d", ".di"];
+    /// All extensions the outline understands — use allLanguageExtensions() instead
+    /// of this field directly; the field is left empty and populated lazily.
+    string[] languageExtensions;
 }
 
 /// File outline widget providing hierarchical code structure view
@@ -136,6 +139,9 @@ class FileOutlineWidget : VerticalLayout {
     this() {
         super("fileOutline");
         _config = OutlineConfig();
+        // Populate language extension list now that all modules are initialised.
+        foreach (ref p; LANGUAGE_PROFILES)
+            _config.languageExtensions ~= p.extensions;
         initializeParsers();
         createUI();
         setupEventHandlers();

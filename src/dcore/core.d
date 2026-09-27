@@ -20,6 +20,7 @@ import dlangui.core.logger;
 
 import dcore.config;
 import dcore.vaultmanager;
+import std.conv : to;
 import dcore.session;
 import dcore.lsp.lspmanager;
 import dcore.editor.editormanager;
@@ -45,6 +46,7 @@ import dcore.ui.mainwindow;
 class DCore {
     private string _configDir;
     private bool _initialized;
+    private ConfigManager _config;
 
     // Core managers
     private LSPManager _lspManager;
@@ -83,6 +85,9 @@ class DCore {
                 throw e;
             }
         }
+
+        // Load (or create) the main config file
+        _config = new ConfigManager(buildPath(_configDir, "dnives.json"));
     }
 
     /**
@@ -108,21 +113,22 @@ class DCore {
     }
 
     /**
-     * Get configuration value
+     * Get a configuration value, falling back to defaultValue when missing.
      */
     T getConfigValue(T)(string key, T defaultValue) {
-        // TODO: Implement proper configuration management
-        // For now, return default values
-        return defaultValue;
+        if (!_config) return defaultValue;
+        return _config.getValue!T(key, defaultValue);
     }
 
     /**
-     * Set configuration value
+     * Persist a configuration value immediately.
      */
     void setConfigValue(T)(string key, T value) {
-        // TODO: Implement proper configuration management
-        // For now, just log the operation
-        Log.d("DCore: Setting config value ", key, " = ", value);
+        if (!_config) return;
+        _config.setValue!T(key, value);
+        try { _config.save(); } catch (Exception e) {
+            Log.w("DCore: Failed to save config after setting '", key, "': ", e.msg);
+        }
     }
 
     /**

@@ -25,6 +25,7 @@ import std.stdio;
 import std.datetime;
 
 import dcore.core;
+import dcore.lang.language_profile;
 import dcore.editor.document;
 import dcore.ai.code_action_manager;
 import dlangide.ui.diffmerger;
@@ -279,32 +280,8 @@ class DiffMergerManager {
 
     /// Detect programming language from file extension
     private string detectLanguage(string filePath) {
-        string ext = extension(filePath).toLower();
-
-        switch (ext) {
-            case ".d":
-                return "d";
-            case ".py":
-                return "python";
-            case ".js":
-                return "javascript";
-            case ".ts":
-                return "typescript";
-            case ".cpp", ".cc", ".cxx":
-                return "cpp";
-            case ".c":
-                return "c";
-            case ".java":
-                return "java";
-            case ".cs":
-                return "csharp";
-            case ".rs":
-                return "rust";
-            case ".go":
-                return "go";
-            default:
-                return "text";
-        }
+        string lang = dcore.lang.language_profile.detectLanguage(filePath);
+        return lang.empty ? "text" : lang;
     }
 
     /// Parse conflict markers in text

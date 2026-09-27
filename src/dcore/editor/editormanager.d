@@ -15,6 +15,7 @@ import dcore.editor.editor;
 import dcore.editor.document;
 import dcore.lsp.lspmanager;
 import dcore.vault.vault;
+import dcore.code.symbol_outline_panel;
 
 /**
  * EditorManager - Manages editor instances and file operations
@@ -34,6 +35,9 @@ class EditorManager {
     private string[] _recentFiles;
     private const int MAX_RECENT_FILES = 20;
     
+    // Symbol navigator panel (optional)
+    private SymbolOutlinePanel _symbolPanel;
+
     // Editor settings
     private bool _showLineNumbers = true;
     private bool _showWhitespace = false;
@@ -41,7 +45,25 @@ class EditorManager {
     private int _tabSize = 4;
     private bool _autoIndent = true;
     private bool _autoCloseBrackets = true;
+    private int _flowCrumbLimit = 12;  /// max breadcrumb hops in Symbol Flow mode
     
+    /**
+     * Register the symbol navigator panel so it receives file-activation events.
+     * Also pushes the current flowCrumbLimit setting into the panel immediately.
+     */
+    void setSymbolPanel(SymbolOutlinePanel panel) {
+        _symbolPanel = panel;
+        if (_symbolPanel) _symbolPanel.flowCrumbLimit = _flowCrumbLimit;
+    }
+
+    /// Read/write the flow breadcrumb limit and persist it immediately.
+    @property int flowCrumbLimit() const { return _flowCrumbLimit; }
+    @property void flowCrumbLimit(int v) {
+        _flowCrumbLimit = v < 1 ? 1 : v;
+        if (_symbolPanel) _symbolPanel.flowCrumbLimit = _flowCrumbLimit;
+        if (_core) _core.setConfigValue("editor.flowCrumbLimit", _flowCrumbLimit);
+    }
+
     /**
      * Constructor
      */
@@ -274,10 +296,14 @@ class EditorManager {
         // Give focus to editor
         if (editor)
             editor.setFocus();
-            
+
         // Get file path
         string filePath = editor.getFilePath();
         string language = editor.getLanguage();
+
+        // Notify symbol panel
+        if (_symbolPanel && filePath.length)
+            _symbolPanel.setActiveFile(filePath);
         
         // Notify LSP manager
         if (_core && _core.lspManager) {
@@ -352,12 +378,16 @@ class EditorManager {
         if (!_core)
             return;
             
-        _showLineNumbers = _core.getConfigValue("editor.showLineNumbers", true);
-        _showWhitespace = _core.getConfigValue("editor.showWhitespace", false);
-        _lineWrapping = _core.getConfigValue("editor.lineWrapping", false);
-        _tabSize = _core.getConfigValue("editor.tabSize", 4);
-        _autoIndent = _core.getConfigValue("editor.autoIndent", true);
-        _autoCloseBrackets = _core.getConfigValue("editor.autoCloseBrackets", true);
+        _showLineNumbers    = _core.getConfigValue("editor.showLineNumbers",    true);
+        _showWhitespace     = _core.getConfigValue("editor.showWhitespace",     false);
+        _lineWrapping       = _core.getConfigValue("editor.lineWrapping",       false);
+        _tabSize            = _core.getConfigValue("editor.tabSize",            4);
+        _autoIndent         = _core.getConfigValue("editor.autoIndent",        true);
+        _autoCloseBrackets  = _core.getConfigValue("editor.autoCloseBrackets", true);
+        _flowCrumbLimit     = _core.getConfigValue("editor.flowCrumbLimit",    12);
+
+        // Push to symbol panel if already created
+        if (_symbolPanel) _symbolPanel.flowCrumbLimit = _flowCrumbLimit;
         
         Log.i("EditorManager: Settings loaded");
     }
@@ -369,12 +399,13 @@ class EditorManager {
         if (!_core)
             return;
             
-        _core.setConfigValue("editor.showLineNumbers", _showLineNumbers);
-        _core.setConfigValue("editor.showWhitespace", _showWhitespace);
-        _core.setConfigValue("editor.lineWrapping", _lineWrapping);
-        _core.setConfigValue("editor.tabSize", _tabSize);
-        _core.setConfigValue("editor.autoIndent", _autoIndent);
+        _core.setConfigValue("editor.showLineNumbers",   _showLineNumbers);
+        _core.setConfigValue("editor.showWhitespace",    _showWhitespace);
+        _core.setConfigValue("editor.lineWrapping",      _lineWrapping);
+        _core.setConfigValue("editor.tabSize",           _tabSize);
+        _core.setConfigValue("editor.autoIndent",        _autoIndent);
         _core.setConfigValue("editor.autoCloseBrackets", _autoCloseBrackets);
+        _core.setConfigValue("editor.flowCrumbLimit",    _flowCrumbLimit);
         
         Log.i("EditorManager: Settings saved");
     }

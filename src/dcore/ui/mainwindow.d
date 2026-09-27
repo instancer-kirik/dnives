@@ -27,6 +27,7 @@ import dlangui.core.logger;
 
 import dcore.components.cccore;
 import dcore.ai.integration;
+import dcore.code.symbol_outline_panel;
 
 /**
  * MainWindow - Primary application window for CompyutinatorCode D implementation
@@ -51,6 +52,9 @@ class MainWindow : AppFrame {
     // Public getters for UI components
     @property DockHost dockHost() { return _dockHost; }
     @property TabWidget centralTabs() { return _centralTabs; }
+
+    // Symbol navigator
+    private SymbolOutlinePanel _symbolPanel;
 
     // Window state
     private bool maximized = false;
@@ -108,8 +112,42 @@ class MainWindow : AppFrame {
         // Update UI once core is set
         if (ccCore) {
             updateWindowTitle();
+            _initSymbolPanel();
         }
     }
+
+    /**
+     * Create and dock the Symbol Navigator panel.
+     * Called once after CCCore is set.
+     */
+    private void _initSymbolPanel() {
+        if (_symbolPanel || !ccCore || !ccCore.dcore) return;
+
+        _symbolPanel = new SymbolOutlinePanel("SYMBOL_PANEL", ccCore.dcore);
+        _symbolPanel.layoutWidth  = 280;
+        _symbolPanel.layoutHeight = FILL_PARENT;
+
+        // Wire navigation: panel asks editor to jump to a location
+        _symbolPanel.onNavigate = delegate(string filePath, int line, int col) {
+            if (!ccCore || !ccCore.dcore) return;
+            auto em = ccCore.dcore.editorManager;
+            if (!em) return;
+            auto editor = em.openFile(filePath);
+            if (editor) editor.gotoLine(line);
+        };
+
+        // Register the panel with EditorManager so it gets file-change events
+        ccCore.dcore.editorManager.setSymbolPanel(_symbolPanel);
+
+        // Dock on the right side
+        auto dock = new DockWindow("SYMBOL_DOCK");
+        dock.text = "Symbols"d;
+        dock.bodyWidget = _symbolPanel;
+        if (_dockHost) _dockHost.addDockedWindow(dock);
+    }
+
+    /// Return the symbol panel (may be null before setCore is called).
+    @property SymbolOutlinePanel symbolPanel() { return _symbolPanel; }
 
     /**
      * Initialize UI components
@@ -160,6 +198,7 @@ class MainWindow : AppFrame {
         viewMenu.add(new Action(ActionID.ViewExplorer, "File Explorer"d));
         viewMenu.add(new Action(ActionID.ViewTerminal, "Terminal"d));
         viewMenu.add(new Action(ActionID.ViewOutput, "Output"d));
+        viewMenu.add(new Action(ActionID.ViewSymbols, "Symbol Navigator\tCtrl+Shift+O"d, null, KeyCode.KEY_O, KeyFlag.Control | KeyFlag.Shift));
         viewMenu.addSeparator();
         viewMenu.add(new Action(ActionID.ViewAIChat, "AI Chat"d, null, KeyCode.F4, cast(KeyFlag)0));
         viewMenu.addSeparator();
@@ -449,6 +488,9 @@ class MainWindow : AppFrame {
                 case ActionID.ViewOutput:
                     toggleDockPanel("Output");
                     return true;
+                case ActionID.ViewSymbols:
+                    toggleDockPanel("Symbols");
+                    return true;
                 case ActionID.ViewAIChat:
                     if (ccCore && ccCore.dcore && ccCore.dcore.isAIEnabled()) {
                         ccCore.dcore.getAIIntegration().toggleAIChat();
@@ -598,6 +640,9 @@ class MainWindow : AppFrame {
             outputEdit.readOnly = true;
             output.addChild(outputEdit);
             dockWidget(output, "Output", DockPosition.Bottom);
+        } else if (id == "Symbols") {
+            // Ensure panel exists (setCore should have done this already)
+            if (!_symbolPanel && ccCore && ccCore.dcore) _initSymbolPanel();
         }
     }
 
@@ -961,6 +1006,7 @@ enum ActionID : int {
     ViewExplorer = 3000,
     ViewTerminal,
     ViewOutput,
+    ViewSymbols,
     ViewZoomIn,
     ViewZoomOut,
     ViewZoomReset,

@@ -1,7 +1,7 @@
 {
   "name": "dnives",
-  "description": "Multi-language IDE with advanced code intelligence and AI integration",
-  "homepage": "https://github.com/buggins/dlangide",
+  "description": "DnivesNBlocksIDE — multi-language code IDE with AI assistant and symbol graph",
+  "homepage": "https://github.com/dnives/dnivesnblocksIDE",
   "license": "Boost",
   "authors": ["Vadim Lopatin", "Kirik"],
 
@@ -82,5 +82,7 @@
     }
   ],
 
-  "versions": ["EmbedStandardResources"]
+  "versions": ["EmbedStandardResources"],
+
+  "dflags": ["-wi"]
 }

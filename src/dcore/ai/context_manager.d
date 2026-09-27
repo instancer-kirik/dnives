@@ -17,6 +17,7 @@ import std.range;
 import dlangui.core.logger;
 
 import dcore.core;
+import dcore.lang.language_profile;
 import dcore.code.symbol_tracker;
 import dcore.lsp.lspmanager;
 import dcore.lsp.lsptypes;
@@ -707,20 +708,7 @@ class ContextManager {
      * Detect programming language from file extension
      */
     private string detectLanguage(string filePath) {
-        string ext = extension(filePath).toLower();
-
-        switch (ext) {
-            case ".d", ".di": return "d";
-            case ".js": return "javascript";
-            case ".ts": return "typescript";
-            case ".py": return "python";
-            case ".rs": return "rust";
-            case ".c": return "c";
-            case ".cpp", ".cxx", ".cc": return "cpp";
-            case ".h": return "c";
-            case ".hpp", ".hxx": return "cpp";
-            default: return "text";
-        }
+        return dcore.lang.language_profile.detectLanguage(filePath);
     }
 
     /**

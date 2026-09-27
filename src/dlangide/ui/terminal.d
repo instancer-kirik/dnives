@@ -353,6 +353,8 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
     protected TerminalContent _content;
     protected TerminalDevice _device;
     protected bool _interactive;
+    private bool _pendingCreate = false;
+    public bool verboseMode = false;
     this() {
         this(null, false);
     }
@@ -366,6 +368,17 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
         _verticalScrollBar.scrollEvent = this;
         addChild(_verticalScrollBar);
         _device = new TerminalDevice();
+        if (interactive) {
+            _pendingCreate = true;
+        } else {
+            _setupDevice(false);
+        }
+    }
+
+    /// returns the underlying TerminalDevice
+    @property TerminalDevice device() { return _device; }
+
+    private void _setupDevice(bool interactive) {
         TerminalWidget _this = this;
         if (_device.create(interactive)) {
             _device.onBytesRead = delegate (string data) {
@@ -571,8 +584,8 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
         return super.onKeyEvent(event);
     }
 
-    /** 
-    Measure widget according to desired width and height constraints. (Step 1 of two phase layout). 
+    /**
+    Measure widget according to desired width and height constraints. (Step 1 of two phase layout).
 
     */
     override void measure(int parentWidth, int parentHeight) {
@@ -600,6 +613,10 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
         _verticalScrollBar.layout(sbrc);
         rc.right = sbrc.left;
         _content.layout(font, rc);
+        if (_pendingCreate) {
+            _pendingCreate = false;
+            _setupDevice(true);
+        }
         if (outputChars.length) {
             // push buffered text
             write(""d);
@@ -791,6 +808,29 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
                         i++;
                         // ignore
                         break;
+                    case ']': {
+                        // OSC sequence — consume until BEL (\007) or ST (ESC \)
+                        // Format: ESC ] Ps ; Pt BEL  or  ESC ] Ps ; Pt ESC \
+                        uint j = i + 2; // skip ESC ]
+                        while (j < outputChars.length) {
+                            if (outputChars[j] == '\x07') {
+                                // terminated by BEL — skip everything including BEL
+                                i = j;
+                                break;
+                            }
+                            if (outputChars[j] == '\x1b' && j + 1 < outputChars.length && outputChars[j+1] == '\\') {
+                                // terminated by ST (ESC \)
+                                i = j + 1;
+                                break;
+                            }
+                            j++;
+                        }
+                        if (j >= outputChars.length) {
+                            // incomplete OSC — wait for more data
+                            unfinished = true;
+                        }
+                        break;
+                    }
                     default:
                         // unsupported
                         break;
@@ -808,6 +848,8 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
                         _content.putChar(ch);
                         break;
                     default:
+                        if (verboseMode)
+                            Log.d("Terminal: unhandled ctrl char 0x", cast(uint)ch, " at pos ", i);
                         break;
                 }
             } else {
@@ -863,6 +905,9 @@ class TerminalDevice : Thread {
     private bool started;
     private bool closed;
     private bool connected;
+    private string _termType = "xterm";
+    @property string termType() { return _termType; }
+    @property void termType(string t) { _termType = t; }
 
     this() {
         super(&threadProc);
@@ -913,7 +958,7 @@ class TerminalDevice : Thread {
                     Log.d("TerminalDevice client disconnecting");
                     connected = false;
                     // disconnect client
-                    FlushFileBuffers(hpipe); 
+                    FlushFileBuffers(hpipe);
                     DisconnectNamedPipe(hpipe);
                 }
             }
@@ -970,7 +1015,7 @@ class TerminalDevice : Thread {
             if (masterfd && masterfd != -1) {
                 auto bytesRead = write_(masterfd, msg.ptr, msg.length);
             }
-            
+
         }
         return true;
     }
@@ -987,13 +1032,13 @@ class TerminalDevice : Thread {
             import std.string;
             // ping terminal to handle closed flag
             HANDLE h = CreateFileA(
-                               _name.toStringz,   // pipe name 
-                               GENERIC_READ |  // read and write access 
+                               _name.toStringz,   // pipe name
+                               GENERIC_READ |  // read and write access
                                GENERIC_WRITE,
-                               0,              // no sharing 
+                               0,              // no sharing
                                null,           // default security attributes
-                               OPEN_EXISTING,  // opens existing pipe 
-                               0,              // default attributes 
+                               OPEN_EXISTING,  // opens existing pipe
+                               0,              // default attributes
                                null);
             if (h != INVALID_HANDLE_VALUE) {
                 DWORD bytesWritten = 0;
@@ -1073,7 +1118,7 @@ class TerminalDevice : Thread {
                     close_c(slavefd);
                 close_c(masterfd);
 
-                setenv("TERM", "xterm-256color", 1);
+                setenv("TERM", _termType.ptr, 1);
 
                 const(char)*[2] args = [shell, null];
                 execv(shell, args.ptr);
@@ -1109,7 +1154,7 @@ class TerminalDevice : Thread {
             SECURITY_ATTRIBUTES sa;
             sa.nLength = sa.sizeof;
             sa.bInheritHandle = TRUE;
-            hpipe = CreateNamedPipeA(cast(const(char)*)_name.toStringz, 
+            hpipe = CreateNamedPipeA(cast(const(char)*)_name.toStringz,
                              PIPE_ACCESS_DUPLEX | FILE_FLAG_WRITE_THROUGH | FILE_FLAG_FIRST_PIPE_INSTANCE, // dwOpenMode
                              //PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT, // | PIPE_REJECT_REMOTE_CLIENTS,
                              PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, // | PIPE_REJECT_REMOTE_CLIENTS,
@@ -1161,4 +1206,3 @@ class TerminalDevice : Thread {
         return true;
     }
 }
-

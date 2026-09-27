@@ -91,7 +91,7 @@ class ConfigManager {
                 static if (is(T == string)) {
                     return value.str;
                 } else static if (is(T == bool)) {
-                    return value.type == JSON_TYPE.TRUE;
+                    return value.type == JSONType.true_;
                 } else static if (is(T == int)) {
                     return cast(int)value.integer;
                 } else static if (is(T == long)) {

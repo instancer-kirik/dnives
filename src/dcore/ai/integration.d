@@ -33,6 +33,7 @@ import dcore.ai.context_manager;
 import dcore.ai.code_action_manager;
 import dcore.ai.widgets.chat_widget;
 import dcore.code.symbol_tracker;
+import dcore.lang.language_profile;
 
 /**
  * AIIntegration - Integrates AI chat system with DCore
@@ -640,20 +641,8 @@ class AIIntegration {
      */
     private string getFileLanguage(string filePath) {
         if (filePath.empty) return "text";
-
-        string ext = extension(filePath).toLower();
-        switch (ext) {
-            case ".d", ".di": return "d";
-            case ".js": return "javascript";
-            case ".ts": return "typescript";
-            case ".py": return "python";
-            case ".rs": return "rust";
-            case ".c": return "c";
-            case ".cpp", ".cxx", ".cc": return "cpp";
-            case ".h": return "c";
-            case ".hpp", ".hxx": return "cpp";
-            default: return "text";
-        }
+        string lang = dcore.lang.language_profile.detectLanguage(filePath);
+        return lang.empty ? "text" : lang;
     }
 
     /**

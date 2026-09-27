@@ -5,6 +5,7 @@ import dlangui;
 import dlangide.workspace.workspace;
 import dlangide.workspace.project;
 import dlangide.ui.commands;
+import dcore.lang.language_profile;
 
 enum ProjectItemType : int {
     None,
@@ -116,16 +117,16 @@ class WorkspacePanel : DockWindow {
                               );
 
         _folderPopupMenu = new MenuItem();
-        _folderPopupMenu.add(ACTION_FILE_NEW_SOURCE_FILE, 
+        _folderPopupMenu.add(ACTION_FILE_NEW_SOURCE_FILE,
                              ACTION_FILE_NEW_DIRECTORY,
                              ACTION_PROJECT_FOLDER_REFRESH, ACTION_PROJECT_FOLDER_OPEN_ITEM,
                              ACTION_PROJECT_FOLDER_EXPAND_ALL, ACTION_PROJECT_FOLDER_COLLAPSE_ALL
-                             //ACTION_PROJECT_FOLDER_REMOVE_ITEM, 
+                             //ACTION_PROJECT_FOLDER_REMOVE_ITEM,
                              //ACTION_PROJECT_FOLDER_RENAME_ITEM
                              );
 
         _filePopupMenu = new MenuItem();
-        _filePopupMenu.add(ACTION_FILE_NEW_SOURCE_FILE, 
+        _filePopupMenu.add(ACTION_FILE_NEW_SOURCE_FILE,
                            ACTION_PROJECT_FOLDER_REFRESH,
                            ACTION_PROJECT_FOLDER_OPEN_ITEM,
                            ACTION_PROJECT_FOLDER_REMOVE_ITEM,
@@ -210,12 +211,15 @@ class WorkspacePanel : DockWindow {
                 addProjectItems(p, child);
             } else {
                 string icon = "text-other";
-                if (child.isDSourceFile)
-                    icon = "text-d";
-                if (child.isJsonFile)
-                    icon = "text-json";
-                if (child.isDMLFile)
-                    icon = "text-dml";
+                {
+                    import dcore.lang.language_profile : detectLanguage;
+                    switch (detectLanguage(child.filename)) {
+                        case "d":    icon = "text-d";    break;
+                        case "json": icon = "text-json"; break;
+                        case "dml":  icon = "text-dml";  break;
+                        default:     icon = "text-other"; break;
+                    }
+                }
                 TreeItem p = root.newChild(child.filename, child.name, icon);
                 p.intParam = ProjectItemType.SourceFile;
                 p.objectParam = child;

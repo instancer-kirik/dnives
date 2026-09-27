@@ -250,8 +250,8 @@ const Action ACTION_WINDOW_SHOW_WORKSPACE_EXPLORER = new Action(
     .disableByDefault();
 const Action ACTION_WINDOW_SHOW_LOG_WINDOW = new Action(
     IDEActions.WindowShowLogWindow, "MENU_WINDOW_SHOW_LOG_WINDOW"c);
-const Action ACTION_WINDOW_TOGGLE_TERMINAL = new Action(IDEActions.WindowToggleTerminal, "MENU_WINDOW_TOGGLE_TERMINAL"c, "terminal", KeyCode
-        .F6);
+const Action ACTION_WINDOW_TOGGLE_TERMINAL = (new Action(IDEActions.WindowToggleTerminal, "MENU_WINDOW_TOGGLE_TERMINAL"c, "terminal", KeyCode
+        .F6)).addAccelerator(KeyCode.TILDE, KeyFlag.Control); // also fires on Ctrl+` (same physical key)
 
 const Action ACTION_CREATE_NEW_WORKSPACE = new Action(
     IDEActions.CreateNewWorkspace, "OPTION_CREATE_NEW_WORKSPACE"c);

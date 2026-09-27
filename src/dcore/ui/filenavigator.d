@@ -20,6 +20,7 @@ import std.conv;
 
 import dcore.core;
 import dcore.search.fuzzysearch;
+import dcore.lang.language_profile;
 import dcore.ui.thememanager;
 
 /**
@@ -30,7 +31,7 @@ class FileTreeItem : TreeItem {
     private bool _isDirectory;
     private bool _isExpanded;
     private bool _isLoaded;
-    
+
     /**
      * Constructor
      */
@@ -40,64 +41,41 @@ class FileTreeItem : TreeItem {
         _isDirectory = isDirectory;
         _isExpanded = false;
         _isLoaded = false;
-        
+
         // Set icon based on file type
         if (isDirectory) {
             super.iconRes = "folder";
         } else {
-            // Determine icon based on extension
-            string ext = extension(fullPath).toLower();
-                
-            switch (ext) {
-                case ".d":
-                    super.iconRes = "d-file";
-                    break;
-                case ".c":
-                case ".cpp":
-                case ".h":
-                case ".hpp":
-                    super.iconRes = "cpp-file";
-                    break;
-                case ".js":
-                case ".ts":
-                    super.iconRes = "js-file";
-                    break;
-                case ".html":
-                case ".css":
-                    super.iconRes = "html-file";
-                    break;
-                case ".json":
-                    super.iconRes = "json-file";
-                    break;
-                case ".md":
-                    super.iconRes = "markdown-file";
-                    break;
-                case ".txt":
-                    super.iconRes = "text-file";
-                    break;
-                default:
-                    super.iconRes = "file";
-                    break;
+            // Determine icon based on language
+            import dcore.lang.language_profile : detectLanguage;
+            switch (detectLanguage(fullPath)) {
+                case "d":                        super.iconRes = "d-file";       break;
+                case "c", "cpp":                 super.iconRes = "cpp-file";     break;
+                case "javascript", "typescript": super.iconRes = "js-file";      break;
+                case "html":                     super.iconRes = "html-file";    break;
+                case "json":                     super.iconRes = "json-file";    break;
+                case "markdown":                 super.iconRes = "markdown-file"; break;
+                default:                         super.iconRes = "text-file";    break;
             }
         }
     }
-    
+
     /**
      * Get full path
      */
     @property string fullPath() { return _fullPath; }
-    
+
     /**
      * Check if item is a directory
      */
     @property bool isDirectory() { return _isDirectory; }
-    
+
     /**
      * Check if directory is expanded
      */
     @property bool isExpanded() { return _isExpanded; }
     @property void isExpanded(bool value) { _isExpanded = value; }
-    
+
     /**
      * Check if directory contents are loaded
      */
@@ -117,45 +95,45 @@ class FileNavigator : VerticalLayout {
     void delegate(string) onFileCreated;
     void delegate(string) onFileRenamed;
     void delegate(string) onFileDeleted;
-    
+
     // UI Components
     private EditLine _searchBox;
     private TreeWidget _fileTree;
     private string _rootPath;
     private DCore _core;
     private ThemeManager _themeManager;
-    
+
     // Search state
     private FuzzyMatcher _matcher;
     private bool _isInSearchMode;
     private string _currentSearchQuery;
-    
+
     // Context menu
     private PopupMenu _contextMenu;
     private string _contextMenuPath;
-    
+
     /**
      * Constructor
      */
     this(string id = null) {
         super(id);
-        
+
         // Create fuzzy matcher
         FuzzyOptions options;
         options.maxResults = 100;
         _matcher = new FuzzyMatcher(options);
-        
+
         // Set layout properties
         layoutWidth = FILL_PARENT;
         layoutHeight = FILL_PARENT;
-        
+
         // Create search box
         _searchBox = new EditLine("FILE_SEARCH");
         _searchBox.layoutWidth = FILL_PARENT;
         _searchBox.text = "Search files..."d;
         _searchBox.backgroundColor = 0x2A2A2A;
         _searchBox.textColor = 0xEAEAEA;
-        
+
         import dlangui.core.events;
         _searchBox.keyEvent = delegate(Widget source, KeyEvent event) {
             if (event.action == KeyAction.Text) {
@@ -164,35 +142,35 @@ class FileNavigator : VerticalLayout {
             }
             return false;
         };
-        
+
         addChild(_searchBox);
-        
+
         // Create file tree
         _fileTree = new TreeWidget("FILE_TREE");
         _fileTree.layoutWidth = FILL_PARENT;
         _fileTree.layoutHeight = FILL_PARENT;
         _fileTree.backgroundColor = 0x00000000; // Transparent
-        
+
         // We'll use mouse events directly
         _fileTree.mouseEvent = &onTreeMouseEvent;
-        
+
         addChild(_fileTree);
-        
+
         // Initialize state
         _isInSearchMode = false;
         _currentSearchQuery = "";
-        
+
         // Create context menu
         createContextMenu();
     }
-    
+
     /**
      * Set core reference
      */
     void setCore(DCore core) {
         _core = core;
     }
-    
+
     /**
      * Set theme manager
      */
@@ -201,7 +179,7 @@ class FileNavigator : VerticalLayout {
         _themeManager = themeManager;
         applyTheme();
     }
-    
+
     /**
      * Apply current theme
      */
@@ -210,13 +188,13 @@ class FileNavigator : VerticalLayout {
             // Use hardcoded values for consistency
             backgroundColor = 0x2A2A2A;
             _fileTree.backgroundColor = 0x2A2A2A;
-            
+
             // Update search box with default colors
             _searchBox.backgroundColor = 0x2A2A2A;  // Dark background
             _searchBox.textColor = 0xEAEAEA;        // Light text
         }
     }
-    
+
     /**
      * Set root path
      */
@@ -225,84 +203,84 @@ class FileNavigator : VerticalLayout {
             Log.e("FileNavigator: Path does not exist: ", path);
             return;
         }
-        
+
         _rootPath = path;
         refresh();
     }
-    
+
     /**
      * Refresh the file tree
      */
     void refresh() {
         if (!_rootPath || _rootPath.length == 0)
             return;
-            
+
         // Clear tree
         _fileTree.items.clear();
-        
+
         // Add root item
         FileTreeItem rootItem = new FileTreeItem(_rootPath, true);
         _fileTree.items.addChild(rootItem);
         // Mark root item as expanded
         rootItem.isExpanded = true;
-        
+
         // Load root directory contents
         loadDirectoryContents(rootItem);
-        
+
         // Mark as loaded
         rootItem.isLoaded = true;
-        
+
         Log.i("FileNavigator: Loaded root path: ", _rootPath);
     }
-    
+
     /**
      * Load directory contents
      */
     private void loadDirectoryContents(FileTreeItem parentItem) {
         if (!parentItem || !parentItem.isDirectory)
             return;
-            
+
         string dirPath = parentItem.fullPath;
-        
+
         try {
             // Get directory contents
             DirEntry[] entries;
-            
+
             // First collect directories
             foreach (entry; dirEntries(dirPath, SpanMode.shallow)) {
                 if (entry.isDir && !baseName(entry.name).startsWith(".")) {
                     entries ~= entry;
                 }
             }
-            
+
             // Sort directories
             sort!((a, b) => baseName(a.name) < baseName(b.name))(entries);
-            
+
             // Add directories to tree
             foreach (entry; entries) {
                 FileTreeItem item = new FileTreeItem(entry.name, true);
-                
+
                 // Add placeholder child to show expand arrow
                 TreeItem placeholder = new TreeItem("placeholder");
                 placeholder.text = "Loading..."d;
                 item.addChild(placeholder);
-                
+
                 parentItem.addChild(item);
             }
-            
+
             // Clear entries for files
             entries = [];
-            
+
             // Then collect files
             foreach (entry; dirEntries(dirPath, SpanMode.shallow)) {
                 if (!entry.isDir && !baseName(entry.name).startsWith(".")) {
                     entries ~= entry;
                 }
             }
-            
+
             // Sort files
             sort!((a, b) => baseName(a.name) < baseName(b.name))(entries);
-            
+
             // Add files to tree
             foreach (entry; entries) {
                 try {
@@ -312,14 +290,14 @@ class FileNavigator : VerticalLayout {
                     Log.e("Error adding file to tree: ", e.msg);
                 }
             }
-            
+
             // Mark as loaded
             parentItem.isLoaded = true;
         } catch (Exception e) {
             Log.e("FileNavigator: Error loading directory: ", e.msg);
         }
     }
-    
+
     /**
      * Handle tree item selection
      */
@@ -328,7 +306,7 @@ class FileNavigator : VerticalLayout {
             auto tree = cast(TreeWidget)source;
             if (!tree)
                 return false;
-                
+
             // Simplified mouse handling - use direct widget access
             if (event.button == MouseButton.Left) {
                 // Just handle as a simple click
@@ -342,7 +320,7 @@ class FileNavigator : VerticalLayout {
         }
         return false;
     }
-    
+
     /**
      * Handle tree item activation
      */
@@ -350,7 +328,7 @@ class FileNavigator : VerticalLayout {
         FileTreeItem fileItem = cast(FileTreeItem)item;
         if (!fileItem)
             return false;
-            
+
         if (fileItem.isDirectory) {
             // Just mark it as loaded
             fileItem.isLoaded = true;
@@ -359,10 +337,10 @@ class FileNavigator : VerticalLayout {
             if (onFileSelected !is null)
                 onFileSelected(fileItem.fullPath);
         }
-        
+
         return true;
     }
-    
+
     /**
      * Handle tree item expansion
      */
@@ -370,9 +348,9 @@ class FileNavigator : VerticalLayout {
         FileTreeItem fileItem = cast(FileTreeItem)item;
         if (!fileItem || !fileItem.isDirectory)
             return false;
-            
+
         fileItem.isExpanded = expanded;
-        
+
         if (expanded && !fileItem.isLoaded) {
             // Load contents
             try {
@@ -385,10 +363,10 @@ class FileNavigator : VerticalLayout {
                 Log.e("Error loading directory contents: ", e.msg);
             }
         }
-        
+
         return true;
     }
-    
+
     /**
      * Handle tree item click
      */
@@ -396,17 +374,17 @@ class FileNavigator : VerticalLayout {
         FileTreeItem fileItem = cast(FileTreeItem)item;
         if (!fileItem)
             return false;
-            
+
         if (!fileItem.isDirectory) {
             // Select the file
             // Notify file selection
             if (onFileSelected !is null)
                 onFileSelected(fileItem.fullPath);
         }
-        
+
         return true;
     }
-    
+
     /**
      * Handle tree item right click
      */
@@ -414,10 +392,10 @@ class FileNavigator : VerticalLayout {
         FileTreeItem fileItem = cast(FileTreeItem)item;
         if (!fileItem)
             return false;
-            
+
         // Store path for context menu actions
         _contextMenuPath = fileItem.fullPath;
-        
+
         // Just handle file selection directly for now
         if (fileItem && !fileItem.isDirectory) {
             if (onFileSelected !is null) {
@@ -427,10 +405,10 @@ class FileNavigator : VerticalLayout {
             // For directories, toggle expansion
             fileItem.isExpanded = !fileItem.isExpanded;
         }
-        
+
         return true;
     }
-    
+
     /**
      * Create context menu
      */
@@ -438,7 +416,7 @@ class FileNavigator : VerticalLayout {
         // Simplified implementation - just create an empty menu
         _contextMenu = new PopupMenu(new MenuItem());
     }
-    
+
     /**
      * Handle context menu actions
      */
@@ -446,7 +424,7 @@ class FileNavigator : VerticalLayout {
         // Simplified implementation - always return true
         return true;
     }
-    
+
     /**
      * Create a new file
      */
@@ -454,30 +432,30 @@ class FileNavigator : VerticalLayout {
         // TODO: Show dialog to get file name
         string fileName = "new_file.txt";
         string newPath;
-        
+
         if (isDir(parentPath)) {
             newPath = buildPath(parentPath, fileName);
         } else {
             newPath = buildPath(dirName(parentPath), fileName);
         }
-        
+
         try {
             // Create empty file
             std.file.write(newPath, "");
-            
+
             // Refresh parent directory
             refreshDirectory(dirName(newPath));
-            
+
             // Notify listeners
             if (onFileCreated !is null)
                 onFileCreated(newPath);
-            
+
             Log.i("FileNavigator: Created file: ", newPath);
         } catch (Exception e) {
             Log.e("FileNavigator: Error creating file: ", e.msg);
         }
     }
-    
+
     /**
      * Create a new folder
      */
@@ -485,26 +463,26 @@ class FileNavigator : VerticalLayout {
         // TODO: Show dialog to get folder name
         string folderName = "new_folder";
         string newPath;
-        
+
         if (isDir(parentPath)) {
             newPath = buildPath(parentPath, folderName);
         } else {
             newPath = buildPath(dirName(parentPath), folderName);
         }
-        
+
         try {
             // Create directory
             mkdirRecurse(newPath);
-            
+
             // Refresh parent directory
             refreshDirectory(dirName(newPath));
-            
+
             Log.i("FileNavigator: Created folder: ", newPath);
         } catch (Exception e) {
             Log.e("FileNavigator: Error creating folder: ", e.msg);
         }
     }
-    
+
     /**
      * Rename file or folder
      */
@@ -512,30 +490,30 @@ class FileNavigator : VerticalLayout {
         // TODO: Show dialog to get new name
         string newName = baseName(path) ~ "_renamed";
         string newPath = buildPath(dirName(path), newName);
-        
+
         try {
             // Rename file or folder
             rename(path, newPath);
-            
+
             // Refresh parent directory
             refreshDirectory(dirName(path));
-            
+
             // Notify listeners
             if (onFileRenamed !is null)
                 onFileRenamed(newPath);
-            
+
             Log.i("FileNavigator: Renamed: ", path, " to ", newPath);
         } catch (Exception e) {
             Log.e("FileNavigator: Error renaming: ", e.msg);
         }
     }
-    
+
     /**
      * Delete file or folder
      */
     private void deleteFileOrFolder(string path) {
         // TODO: Show confirmation dialog
-        
+
         try {
             if (isDir(path)) {
                 // Remove directory recursively
@@ -544,20 +522,20 @@ class FileNavigator : VerticalLayout {
                 // Remove file
                 remove(path);
             }
-            
+
             // Refresh parent directory
             refreshDirectory(dirName(path));
-            
+
             // Notify listeners
             if (onFileDeleted !is null)
                 onFileDeleted(path);
-            
+
             Log.i("FileNavigator: Deleted: ", path);
         } catch (Exception e) {
             Log.e("FileNavigator: Error deleting: ", e.msg);
         }
     }
-    
+
     /**
      * Refresh a specific directory
      */
@@ -565,7 +543,7 @@ class FileNavigator : VerticalLayout {
     private void refreshDirectory(string dirPath) {
         // Find the directory item in the tree
         FileTreeItem dirItem = findItemByPath(dirPath);
-        
+
         if (dirItem) {
             // Clear and reload
             while (dirItem.childCount > 0)
@@ -577,7 +555,7 @@ class FileNavigator : VerticalLayout {
             refresh();
         }
     }
-    
+
     /**
      * Find a tree item by path
      */
@@ -587,10 +565,10 @@ class FileNavigator : VerticalLayout {
             FileTreeItem fileItem = cast(FileTreeItem)item;
             if (!fileItem)
                 return null;
-                
+
             if (fileItem.fullPath == searchPath)
                 return fileItem;
-                
+
             // Search children
             for (int i = 0; i < item.childCount; i++) {
                 TreeItem child = item.child(i);
@@ -598,54 +576,54 @@ class FileNavigator : VerticalLayout {
                 if (result)
                     return result;
             }
-            
+
             return null;
         }
-        
+
         // Start search from root items
         foreach (TreeItem item; _fileTree.items) {
             FileTreeItem result = findRecursive(item, path);
             if (result)
                 return result;
         }
-        
+
         return null;
     }
-    
+
     /**
      * Handle search box changes
      */
     private void onSearchChanged(string query) {
         _currentSearchQuery = query;
-        
+
         if (query.length == 0) {
             // Exit search mode
             _isInSearchMode = false;
             refresh();
             return;
         }
-        
+
         // Enter search mode
         _isInSearchMode = true;
-        
+
         // Clear tree
         _fileTree.items.clear();
-        
+
         // Search for files
         searchFiles(query);
     }
-    
+
     /**
      * Perform file search
      */
     private void searchFiles(string query) {
         if (!_rootPath || _rootPath.length == 0)
             return;
-            
+
         try {
             // Collect all files in the project
             string[] filePaths;
-            
+
             void collectFiles(string dir) {
                 try {
                     foreach (entry; dirEntries(dir, SpanMode.shallow)) {
@@ -659,25 +637,25 @@ class FileNavigator : VerticalLayout {
                     // Skip directories we can't access
                 }
             }
-            
+
             collectFiles(_rootPath);
-            
+
             // Perform fuzzy search
             auto results = _matcher.searchFiles(query, filePaths);
-            
+
             // Add results to tree
             foreach (result; results) {
                 // Create path segments
                 string relativePath = result.path.replace(_rootPath ~ dirSeparator, "");
                 string[] segments = relativePath.split(dirSeparator);
-                
+
                 // Create virtual directory structure based on path
                 TreeItem currentParent = _fileTree.items;
                 string currentPath = _rootPath;
-                
+
                 for (int i = 0; i < segments.length - 1; i++) {
                     currentPath = buildPath(currentPath, segments[i]);
-                    
+
                     // Check if segment already exists in current parent
                     TreeItem existingItem = null;
                     for (int j = 0; j < currentParent.childCount; j++) {
@@ -688,7 +666,7 @@ class FileNavigator : VerticalLayout {
                             break;
                         }
                     }
-                    
+
                     if (existingItem) {
                         currentParent = existingItem;
                     } else {
@@ -700,23 +678,23 @@ class FileNavigator : VerticalLayout {
                         currentParent = newItem;
                     }
                 }
-                
+
                 // Add file as leaf
                 FileTreeItem fileItem = new FileTreeItem(result.path, false);
                 currentParent.addChild(fileItem);
             }
-            
+
             // Expand all virtual directories
             for (int i = 0; i < _fileTree.items.childCount; i++) {
                 TreeItem item = _fileTree.items.child(i);
                 expandAll(item);
             }
-            
+
         } catch (Exception e) {
             Log.e("FileNavigator: Error searching files: ", e.msg);
         }
     }
-    
+
     /**
      * Expand all items recursively
      */
@@ -728,7 +706,7 @@ class FileNavigator : VerticalLayout {
             }
         }
     }
-    
+
     /**
      * Get currently selected file path
      */
@@ -736,26 +714,26 @@ class FileNavigator : VerticalLayout {
         TreeItem selectedItem = _fileTree.items.selectedItem;
         if (!selectedItem)
             return null;
-            
+
         FileTreeItem fileItem = cast(FileTreeItem)selectedItem;
         if (!fileItem)
             return null;
-            
+
         return fileItem.fullPath;
     }
-    
+
     /**
      * Select file by path
      */
     bool selectFile(string path) {
         FileTreeItem item = findItemByPath(path);
-        
+
         if (item) {
             _fileTree.items.selectItem(item);
             _fileTree.invalidate();
             return true;
         }
-        
+
         return false;
     }
 }

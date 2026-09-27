@@ -30,6 +30,7 @@ import std.format;
 import std.process;
 
 import dcore.core;
+import dcore.lang.language_profile;
 import dcore.vault.workspace;
 import dlangide.ui.inlinediffeditor;
 import dlangide.ui.fileoutline;
@@ -129,7 +130,7 @@ struct WorkspaceConfig {
     bool autoRefresh = true;
     int refreshInterval = 5000; // milliseconds
     string[] excludePatterns = [".git", ".dub", "node_modules", "*.o", "*.obj"];
-    string[] includePatterns = ["*.d", "*.di", "*.py", "*.js", "*.ts", "*.c", "*.cpp", "*.h"];
+    string[] includePatterns = ["*"]; // file-type filtering now handled by LanguageProfile
 }
 
 /// Workspace outline widget providing hierarchical project/file view
@@ -545,11 +546,9 @@ class WorkspaceOutlineWidget : VerticalLayout {
         string ext = extension(filePath).toLower();
         string baseName = baseName(filePath).toLower();
 
-        // Source files
-        if ([".d", ".di", ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp",
-             ".py", ".js", ".ts", ".rs", ".go", ".java", ".cs"].canFind(ext)) {
+        // Source files — delegate to language registry
+        if (dcore.lang.language_profile.isSourceFile(filePath))
             return WorkspaceItemType.SourceFile;
-        }
 
         // Test files
         if (baseName.canFind("test") || baseName.canFind("spec") ||

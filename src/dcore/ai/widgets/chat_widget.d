@@ -28,16 +28,23 @@ import dlangui.widgets.layouts;
 import dlangui.widgets.popup;
 import dlangui.widgets.scrollbar;
 import dlangui.dialogs.dialog;
+import dlangui.dialogs.filedlg;
 import dlangui.core.logger;
 import dlangui.core.events;
 import dlangui.graphics.colors;
 import dlangui.graphics.drawbuf;
 
 import dcore.core;
+import dcore.lang.language_profile;
 import dcore.ai.ai_backend;
 import dcore.ai.context_manager;
 import dcore.ai.chatgpt_importer;
 import dcore.code.symbol_tracker;
+import dcore.ai.share_portal;
+import dcore.ai.widgets.share_dialog;
+import dcore.ai.name_registry;
+import dcore.ai.widgets.name_registry_dialog;
+import dcore.ai.widgets.history_browser;
 import dlangui.widgets.combobox;
 
 /**
@@ -130,7 +137,8 @@ class ChatWidget : HorizontalLayout {
 
     // UI components - Left pane (chat)
     private VerticalLayout _leftPane;
-    private HorizontalLayout _chatToolbar;      // view bar strip at top of chat pane
+    private HorizontalLayout _chatToolbar;      // primary toolbar strip
+    private HorizontalLayout _bulkActionBar;    // secondary bar, visible only in select mode
     private TextWidget _threadSourceBadge;       // shows "local" / "ChatGPT" source
     private ComboBox _backendCombo;              // backend selector
     private HorizontalLayout _continueBanner;    // shown for imported threads
@@ -161,7 +169,10 @@ class ChatWidget : HorizontalLayout {
     private string _selectedBackend;   // "" means use AIBackendManager default
     private string[] _backendNames;    // parallel to combobox items
     private bool _suppressTabChange;   // guard against re-entrant tab events
-    
+
+    // Name registry (lazily initialised)
+    private NameRegistry _nameRegistry;
+
     // Bulk selection state
     private string[] _selectedMessageIds;     // Selected message IDs
     private string[string] _selectedBlockIds; // Selected block IDs (key: blockId, value: messageId)
@@ -259,7 +270,7 @@ class ChatWidget : HorizontalLayout {
         _inputContainer.padding(Rect(8, 8, 8, 8));
         _inputContainer.backgroundColor(0x1A1A1A);
 
-        _attachButton = new Button("ATTACH_BTN", "📎");
+        _attachButton = new Button("ATTACH_BTN", "📎"d);
         _attachButton.tooltipText = "Attach files or symbols";
         _inputContainer.addChild(_attachButton);
 
@@ -273,11 +284,11 @@ class ChatWidget : HorizontalLayout {
         _inputBox.vscrollbarMode = ScrollBarMode.Auto;  // Show scrollbar when needed
         _inputContainer.addChild(_inputBox);
 
-        _sendButton = new Button("SEND_BTN", "Send");
+        _sendButton = new Button("SEND_BTN", "Send"d);
         _sendButton.enabled = false;
         _inputContainer.addChild(_sendButton);
 
-        _stopButton = new Button("STOP_BTN", "Stop");
+        _stopButton = new Button("STOP_BTN", "Stop"d);
         _stopButton.enabled = false;
         _stopButton.visibility = Visibility.Gone;
         _inputContainer.addChild(_stopButton);
@@ -308,20 +319,36 @@ class ChatWidget : HorizontalLayout {
         spacer.layoutWeight = 1;
         _chatToolbar.addChild(spacer);
 
-        // New Thread button
-        auto newThreadBtn = new Button("NEW_THREAD_BTN", "+ New Thread");
+        // ── Primary toolbar ─────────────────────────────────────────────
+        //  [badge]  [spacer]  [History]  [+ Thread]  [Context]  [☐ Select]  [spacer]  [model combo]  [⚙]
+
+        // New Thread
+        auto newThreadBtn = new Button("NEW_THREAD_BTN", "+ Thread"d);
         newThreadBtn.fontSize = 10;
-        newThreadBtn.tooltipText = "Create a new conversation thread";
+        newThreadBtn.minWidth = 64;
+        newThreadBtn.tooltipText = "New conversation thread";
         newThreadBtn.click = delegate(Widget source) {
             createNewThread("New Conversation");
             return true;
         };
         _chatToolbar.addChild(newThreadBtn);
 
+        // History browser
+        auto historyBtn = new Button("HISTORY_BTN", "History"d);
+        historyBtn.fontSize = 10;
+        historyBtn.minWidth = 56;
+        historyBtn.tooltipText = "Browse and search all chat history";
+        historyBtn.click = delegate(Widget source) {
+            _openHistoryDialog();
+            return true;
+        };
+        _chatToolbar.addChild(historyBtn);
+
         // Context pane toggle
-        auto ctxToggleBtn = new Button("CTX_TOGGLE_BTN", "Context ▸");
+        auto ctxToggleBtn = new Button("CTX_TOGGLE_BTN", "Context"d);
         ctxToggleBtn.fontSize = 10;
-        ctxToggleBtn.tooltipText = "Show/hide the context and files panel";
+        ctxToggleBtn.minWidth = 56;
+        ctxToggleBtn.tooltipText = "Show / hide the files & context panel";
         ctxToggleBtn.click = delegate(Widget source) {
             _contextPaneVisible = !_contextPaneVisible;
             if (_rightPane) {
@@ -329,50 +356,53 @@ class ChatWidget : HorizontalLayout {
                 _leftPane.layoutWeight = _contextPaneVisible ? 65 : 100;
             }
             auto btn = cast(Button)source;
-            if (btn) btn.text = _contextPaneVisible ? "Context ◂" : "Context ▸";
+            if (btn) btn.backgroundColor = _contextPaneVisible ? 0x2A5C2A : 0x3A3A3C;
             requestLayout();
             return true;
         };
         _chatToolbar.addChild(ctxToggleBtn);
 
-        // Bulk selection controls
-        auto bulkSelectBtn = new Button("BULK_SELECT_BTN", "☐ Select");
+        // Bulk select toggle (stays in primary bar so it's always reachable)
+        auto bulkSelectBtn = new Button("BULK_SELECT_BTN", "Select"d);
         bulkSelectBtn.fontSize = 10;
-        bulkSelectBtn.tooltipText = "Toggle bulk selection mode";
+        bulkSelectBtn.minWidth = 48;
+        bulkSelectBtn.tooltipText = "Toggle bulk-selection mode";
         bulkSelectBtn.click = delegate(Widget source) {
             toggleBulkSelectionMode();
             return true;
         };
         _chatToolbar.addChild(bulkSelectBtn);
-        
-        auto copySelectedBtn = new Button("COPY_SELECTED_BTN", "📋 Copy Selected");
-        copySelectedBtn.fontSize = 10;
-        copySelectedBtn.tooltipText = "Copy selected messages and blocks";
-        copySelectedBtn.enabled = false;
-        copySelectedBtn.click = delegate(Widget source) {
-            copySelectedContent();
+
+        // Names registry
+        auto namesBtn = new Button("NAMES_BTN", "Names"d);
+        namesBtn.fontSize = 10;
+        namesBtn.minWidth = 48;
+        namesBtn.tooltipText = "Name registry — scan threads for people, places, terms";
+        namesBtn.click = delegate(Widget source) {
+            openNameRegistryDialog();
             return true;
         };
-        _chatToolbar.addChild(copySelectedBtn);
-        
-        auto exportSelectedBtn = new Button("EXPORT_SELECTED_BTN", "💾 Export");
-        exportSelectedBtn.fontSize = 10;
-        exportSelectedBtn.tooltipText = "Export selected content to file";
-        exportSelectedBtn.enabled = false;
-        exportSelectedBtn.click = delegate(Widget source) {
-            exportSelectedContent();
+        _chatToolbar.addChild(namesBtn);
+
+        // Export menu
+        auto exportBtn = new Button("EXPORT_BTN", "Export ▾"d);
+        exportBtn.fontSize = 10;
+        exportBtn.minWidth = 60;
+        exportBtn.tooltipText = "Export current thread or selected messages";
+        exportBtn.click = delegate(Widget source) {
+            _showExportMenu(source);
             return true;
         };
-        _chatToolbar.addChild(exportSelectedBtn);
-        
-        // Flexible spacer
+        _chatToolbar.addChild(exportBtn);
+
+        // Spacer before model selector
         auto spacer2 = new Widget("TOOLBAR_SPACER2");
         spacer2.layoutWidth = FILL_PARENT;
         spacer2.layoutWeight = 1;
         _chatToolbar.addChild(spacer2);
 
         // "Backend:" label
-        auto backendLabel = new TextWidget("BACKEND_LABEL", "Backend: "d);
+        auto backendLabel = new TextWidget("BACKEND_LABEL", "Model: "d);
         backendLabel.textColor = 0x9B9B9B;
         backendLabel.fontSize = 11;
         _chatToolbar.addChild(backendLabel);
@@ -391,10 +421,12 @@ class ChatWidget : HorizontalLayout {
             return true;
         };
 
+        _backendCombo.minWidth = 82;
+        _backendCombo.maxWidth = 110;
         _chatToolbar.addChild(_backendCombo);
 
         // "API Keys..." button — opens IDE Preferences at the AI settings page
-        auto apiKeysBtn = new Button("API_KEYS_BTN", "⚙ API Keys");
+        auto apiKeysBtn = new Button("API_KEYS_BTN", "⚙ API Keys"d);
         apiKeysBtn.fontSize = 10;
         apiKeysBtn.tooltipText = "Configure API keys and models (Preferences → AI)";
         apiKeysBtn.click = delegate(Widget source) {
@@ -405,6 +437,70 @@ class ChatWidget : HorizontalLayout {
         _chatToolbar.addChild(apiKeysBtn);
 
         _leftPane.addChild(_chatToolbar);
+
+        // ── Bulk-action bar (hidden until select mode is active) ──────────────
+        _bulkActionBar = new HorizontalLayout("BULK_ACTION_BAR");
+        _bulkActionBar.layoutWidth  = FILL_PARENT;
+        _bulkActionBar.layoutHeight = WRAP_CONTENT;
+        _bulkActionBar.padding      = Rect(8, 3, 8, 3);
+        _bulkActionBar.backgroundColor = 0x2A2A1A;
+        _bulkActionBar.visibility   = Visibility.Gone;
+
+        auto selLabel = new TextWidget("BULK_SEL_LABEL", "0 selected"d);
+        selLabel.fontSize  = 10;
+        selLabel.textColor = 0xBBBB88;
+        selLabel.minWidth  = 80;
+        _bulkActionBar.addChild(selLabel);
+
+        auto bulkSep = new Widget("BULK_SEP");
+        bulkSep.layoutWidth = FILL_PARENT;
+        bulkSep.layoutWeight = 1;
+        _bulkActionBar.addChild(bulkSep);
+
+        auto copySelectedBtn = new Button("COPY_SELECTED_BTN", "Copy"d);
+        copySelectedBtn.fontSize = 10;
+        copySelectedBtn.minWidth = 48;
+        copySelectedBtn.tooltipText = "Copy selected messages to clipboard";
+        copySelectedBtn.enabled = false;
+        copySelectedBtn.click = delegate(Widget source) {
+            copySelectedContent();
+            return true;
+        };
+        _bulkActionBar.addChild(copySelectedBtn);
+
+        auto exportSelectedBtn = new Button("EXPORT_SELECTED_BTN", "Export"d);
+        exportSelectedBtn.fontSize = 10;
+        exportSelectedBtn.minWidth = 48;
+        exportSelectedBtn.tooltipText = "Export selected content to a Markdown file";
+        exportSelectedBtn.enabled = false;
+        exportSelectedBtn.click = delegate(Widget source) {
+            exportSelectedContent();
+            return true;
+        };
+        _bulkActionBar.addChild(exportSelectedBtn);
+
+        auto shareSelectedBtn = new Button("SHARE_SELECTED_BTN", "Share"d);
+        shareSelectedBtn.fontSize = 10;
+        shareSelectedBtn.minWidth = 48;
+        shareSelectedBtn.tooltipText = "Generate a shareable HTML page from selected messages";
+        shareSelectedBtn.enabled = false;
+        shareSelectedBtn.click = delegate(Widget source) {
+            openShareDialog();
+            return true;
+        };
+        _bulkActionBar.addChild(shareSelectedBtn);
+
+        auto doneSelectingBtn = new Button("DONE_SELECTING_BTN", "Done"d);
+        doneSelectingBtn.fontSize = 10;
+        doneSelectingBtn.minWidth = 48;
+        doneSelectingBtn.tooltipText = "Exit selection mode";
+        doneSelectingBtn.click = delegate(Widget source) {
+            if (_bulkSelectionMode) toggleBulkSelectionMode();
+            return true;
+        };
+        _bulkActionBar.addChild(doneSelectingBtn);
+
+        _leftPane.addChild(_bulkActionBar);
     }
 
     /**
@@ -529,19 +625,24 @@ class ChatWidget : HorizontalLayout {
      */
     private void toggleBulkSelectionMode() {
         _bulkSelectionMode = !_bulkSelectionMode;
-        
+
+        // Update primary-bar select button appearance
         auto selectBtn = cast(Button)_chatToolbar.childById("BULK_SELECT_BTN");
         if (selectBtn) {
-            selectBtn.text = _bulkSelectionMode ? "☑ Selected" : "☐ Select";
-            selectBtn.backgroundColor = _bulkSelectionMode ? 0x2D5A2D : 0x3A3A3A;
+            selectBtn.text = _bulkSelectionMode ? "Selecting"d : "Select"d;
+            selectBtn.backgroundColor = _bulkSelectionMode ? 0x4A5A1A : 0x3A3A3C;
         }
-        
+
+        // Show / hide the bulk-action bar
+        if (_bulkActionBar)
+            _bulkActionBar.visibility = _bulkSelectionMode ? Visibility.Visible : Visibility.Gone;
+
         // Update button states
         updateBulkActionButtons();
-        
+
         // Refresh message widgets to show/hide selection checkboxes
         refreshMessageWidgets();
-        
+
         Log.i("ChatWidget: Bulk selection mode ", _bulkSelectionMode ? "enabled" : "disabled");
     }
 
@@ -550,12 +651,26 @@ class ChatWidget : HorizontalLayout {
      */
     private void updateBulkActionButtons() {
         bool hasSelection = _selectedMessageIds.length > 0 || _selectedBlockIds.length > 0;
-        
-        auto copyBtn = cast(Button)_chatToolbar.childById("COPY_SELECTED_BTN");
+
+        // Buttons live in the bulk-action bar
+        auto bar = _bulkActionBar;
+        if (!bar) return;
+
+        auto copyBtn = cast(Button)bar.childById("COPY_SELECTED_BTN");
         if (copyBtn) copyBtn.enabled = hasSelection;
-        
-        auto exportBtn = cast(Button)_chatToolbar.childById("EXPORT_SELECTED_BTN");
+
+        auto exportBtn = cast(Button)bar.childById("EXPORT_SELECTED_BTN");
         if (exportBtn) exportBtn.enabled = hasSelection;
+
+        auto shareBtn = cast(Button)bar.childById("SHARE_SELECTED_BTN");
+        if (shareBtn) shareBtn.enabled = hasSelection;
+
+        // Update the selection count label
+        auto lbl = cast(TextWidget)bar.childById("BULK_SEL_LABEL");
+        if (lbl) {
+            int n = cast(int)(_selectedMessageIds.length + _selectedBlockIds.length);
+            lbl.text = format("%d selected", n).to!dstring;
+        }
     }
 
     /**
@@ -563,14 +678,14 @@ class ChatWidget : HorizontalLayout {
      */
     private void toggleMessageSelection(string messageId) {
         if (!_bulkSelectionMode) return;
-        
+
         auto index = _selectedMessageIds.countUntil!(a => a == messageId);
         if (index < _selectedMessageIds.length) {
             _selectedMessageIds = _selectedMessageIds[0..index] ~ _selectedMessageIds[index+1..$];
         } else {
             _selectedMessageIds ~= messageId;
         }
-        
+
         updateBulkActionButtons();
         updateMessageSelectionUI(messageId);
     }
@@ -580,13 +695,13 @@ class ChatWidget : HorizontalLayout {
      */
     private void toggleBlockSelection(string blockId, string messageId) {
         if (!_bulkSelectionMode) return;
-        
+
         if (blockId in _selectedBlockIds) {
             _selectedBlockIds.remove(blockId);
         } else {
             _selectedBlockIds[blockId] = messageId;
         }
-        
+
         updateBulkActionButtons();
         updateBlockSelectionUI(blockId);
     }
@@ -599,7 +714,7 @@ class ChatWidget : HorizontalLayout {
         if (messageWidget) {
             bool isSelected = _selectedMessageIds.canFind(messageId);
             messageWidget.backgroundColor = isSelected ? 0x2D4A2D : 0x1E1E1E;
-            
+
             // Update checkbox if present
             auto checkbox = cast(Button)messageWidget.childById("MSG_CHECKBOX_" ~ messageId);
             if (checkbox) {
@@ -616,7 +731,7 @@ class ChatWidget : HorizontalLayout {
         if (blockWidget) {
             bool isSelected = (blockId in _selectedBlockIds) !is null;
             blockWidget.backgroundColor = isSelected ? 0x2D4A2D : 0x1E1E1E;
-            
+
             // Update checkbox if present
             auto checkbox = cast(Button)blockWidget.childById("BLOCK_CHECKBOX_" ~ blockId);
             if (checkbox) {
@@ -630,7 +745,7 @@ class ChatWidget : HorizontalLayout {
      */
     private void copySelectedContent() {
         string content;
-        
+
         // Add selected messages
         foreach (messageId; _selectedMessageIds) {
             auto found = _threads[_currentThreadId].messages.find!(m => m.id == messageId);
@@ -639,7 +754,7 @@ class ChatWidget : HorizontalLayout {
                 content ~= format("[%s] %s:\n%s\n\n", message.role, message.timestamp.toString(), message.content);
             }
         }
-        
+
         // Add selected blocks
         foreach (blockId, messageId; _selectedBlockIds) {
             auto blockWidget = _chatContainer.childById(blockId);
@@ -647,7 +762,7 @@ class ChatWidget : HorizontalLayout {
                 content ~= format("[Block from %s]:\n%s\n\n", messageId, editBox.text.to!string);
             }
         }
-        
+
         if (!content.empty) {
             platform.setClipboardText(content.to!dstring);
             Log.i("ChatWidget: Copied selected content to clipboard");
@@ -664,7 +779,7 @@ class ChatWidget : HorizontalLayout {
         }
 
         string content = generateExportContent();
-        
+
         if (content.empty) {
             Log.w("ChatWidget: No content to export");
             return;
@@ -672,17 +787,17 @@ class ChatWidget : HorizontalLayout {
 
         // Generate filename with timestamp
         auto now = Clock.currTime();
-        string timestamp = format("%04d%02d%02d_%02d%02d%02d", 
+        string timestamp = format("%04d%02d%02d_%02d%02d%02d",
             now.year, now.month, now.day, now.hour, now.minute, now.second);
         string filename = format("dnives_export_%s.md", timestamp);
 
         // Show save dialog or use default location
         string exportPath = getExportPath(filename);
-        
+
         try {
             std.file.write(exportPath, content);
             Log.i("ChatWidget: Exported content to ", exportPath);
-            
+
             // Show success notification to user
             showExportSuccess(exportPath);
         } catch (Exception e) {
@@ -696,22 +811,22 @@ class ChatWidget : HorizontalLayout {
      */
     private string generateExportContent() {
         string content;
-        
+
         // Add header
         content ~= "# Dnives Chat Export\n\n";
         content ~= format("**Exported:** %s\n", Clock.currTime().toString());
         content ~= format("**Thread:** %s\n\n", _currentThreadId);
-        
+
         // Add selected messages
         if (_selectedMessageIds.length > 0) {
             content ~= "## Selected Messages\n\n";
-            
+
             foreach (messageId; _selectedMessageIds) {
                 if (_currentThreadId in _threads) {
                     auto thread = _threads[_currentThreadId];
                     foreach (message; thread.messages) {
                         if (message.id == messageId) {
-                            content ~= format("### %s - %s\n\n", 
+                            content ~= format("### %s - %s\n\n",
                                 message.role, message.timestamp.toString());
                             content ~= message.content ~ "\n\n";
                             content ~= "---\n\n";
@@ -721,14 +836,14 @@ class ChatWidget : HorizontalLayout {
                 }
             }
         }
-        
+
         // Add selected blocks
         if (_selectedBlockIds.length > 0) {
             content ~= "## Selected Blocks\n\n";
-            
+
             foreach (blockId, messageId; _selectedBlockIds) {
                 content ~= format("### Block from %s\n\n", messageId);
-                
+
                 auto blockWidget = _chatContainer.childById(blockId);
                 if (auto editBox = cast(MessageEditBox)blockWidget) {
                     content ~= editBox.getEditedText() ~ "\n\n";
@@ -736,7 +851,7 @@ class ChatWidget : HorizontalLayout {
                 }
             }
         }
-        
+
         return content;
     }
 
@@ -771,11 +886,11 @@ class ChatWidget : HorizontalLayout {
      */
     private void refreshMessageWidgets() {
         if (_currentThreadId.empty || _currentThreadId !in _threads) return;
-        
+
         auto thread = _threads[_currentThreadId];
         foreach (message; thread.messages) {
             updateMessageSelectionUI(message.id);
-            
+
             // Update block selections within this message
             auto contentLayout = cast(VerticalLayout)_chatContainer.childById("CONTENT_LAYOUT_" ~ message.id);
             if (contentLayout) {
@@ -818,7 +933,7 @@ class ChatWidget : HorizontalLayout {
         auto thread = _threads[_currentThreadId];
         ChatMessage targetMessage;
         bool messageExists = false;
-        
+
         foreach (msg; thread.messages) {
             if (msg.id == messageId) {
                 targetMessage = msg;
@@ -845,13 +960,13 @@ class ChatWidget : HorizontalLayout {
         }
 
         contentBox.startEditing(blockId, messageId);
-        
+
         // Update UI to show save button and hide edit button
         auto header = _chatContainer.childById(blockId ~ "_HEADER");
         if (header) {
             auto editBtn = header.childById(blockId ~ "_EDIT");
             auto saveBtn = header.childById(blockId ~ "_SAVE");
-            
+
             if (editBtn) editBtn.visibility = Visibility.Gone;
             if (saveBtn) saveBtn.visibility = Visibility.Visible;
         }
@@ -890,10 +1005,10 @@ class ChatWidget : HorizontalLayout {
 
             // Save the changes
             contentBox.saveEditing();
-            
+
             // Update the underlying message content
             updateMessageContent(blockId, newText);
-            
+
             // Update context manager about the change
             // Note: ContextManager may not have updateConversationContext method
             // This would be implemented based on actual ContextManager API
@@ -906,7 +1021,7 @@ class ChatWidget : HorizontalLayout {
         if (header) {
             auto editBtn = header.childById(blockId ~ "_EDIT");
             auto saveBtn = header.childById(blockId ~ "_SAVE");
-            
+
             if (editBtn) editBtn.visibility = Visibility.Visible;
             if (saveBtn) saveBtn.visibility = Visibility.Gone;
         }
@@ -944,17 +1059,17 @@ class ChatWidget : HorizontalLayout {
 
         auto thread = _threads[_currentThreadId];
         string messageId = blockId.split("_")[1];
-        
+
         foreach (ref message; thread.messages) {
             if (message.id == messageId) {
                 // Find and replace the block in the message content
                 // This is a simplified approach - in practice, you'd want better block tracking
                 string oldContent = message.content;
-                
+
                 // Try to identify the block boundaries and replace
                 // This is complex - for now, we'll append a note about the edit
                 message.content ~= "\n\n[Edited block: " ~ blockId ~ "]\n" ~ newContent;
-                
+
                 Log.i("ChatWidget: Updated content for message ", messageId);
                 break;
             }
@@ -1398,7 +1513,7 @@ class ChatWidget : HorizontalLayout {
 
         // Selection checkbox (shown in bulk selection mode)
         if (_bulkSelectionMode) {
-            auto checkbox = new Button("MSG_CHECKBOX_" ~ message.id, "☐");
+            auto checkbox = new Button("MSG_CHECKBOX_" ~ message.id, "☐"d);
             checkbox.fontSize = 12;
             checkbox.minWidth(20);
             checkbox.backgroundColor = 0x3A3A3A;
@@ -1433,7 +1548,7 @@ class ChatWidget : HorizontalLayout {
             actionsLayout.layoutWidth(FILL_PARENT).layoutHeight(WRAP_CONTENT);
             actionsLayout.padding(Rect(0, 5, 0, 0));
 
-            auto copyButton = new Button("COPY_ALL_" ~ message.id, "Copy All");
+            auto copyButton = new Button("COPY_ALL_" ~ message.id, "Copy All"d);
             copyButton.fontSize = 10;
             copyButton.click = delegate(Widget source) {
                 platform.setClipboardText(message.content.to!dstring);
@@ -1441,7 +1556,7 @@ class ChatWidget : HorizontalLayout {
             };
             actionsLayout.addChild(copyButton);
 
-            auto copyBlockedButton = new Button("COPY_BLOCKED_" ~ message.id, "Copy Blocked");
+            auto copyBlockedButton = new Button("COPY_BLOCKED_" ~ message.id, "Copy Blocked"d);
             copyBlockedButton.fontSize = 10;
             copyBlockedButton.click = delegate(Widget source) {
                 auto contentLayout = _chatContainer.childById("CONTENT_LAYOUT_" ~ message.id);
@@ -1468,7 +1583,7 @@ class ChatWidget : HorizontalLayout {
             actionsLayout.addChild(copyBlockedButton);
 
             if (message.role == AIMessage.Role.Assistant && hasCodeBlocks(message.content)) {
-                auto applyButton = new Button("APPLY_" ~ message.id, "Apply Code");
+                auto applyButton = new Button("APPLY_" ~ message.id, "Apply Code"d);
                 applyButton.fontSize = 10;
                 applyButton.click = delegate(Widget source) {
                     applyCodeFromMessage(message);
@@ -1479,7 +1594,7 @@ class ChatWidget : HorizontalLayout {
 
             // Regenerate button for AI messages
             if (message.role == AIMessage.Role.Assistant) {
-                auto regenerateBtn = new Button("REGEN_" ~ message.id, "🔄 Regenerate");
+                auto regenerateBtn = new Button("REGEN_" ~ message.id, "🔄 Regenerate"d);
                 regenerateBtn.fontSize = 10;
                 regenerateBtn.click = delegate(Widget source) {
                     regenerateMessage(message.id);
@@ -1489,7 +1604,7 @@ class ChatWidget : HorizontalLayout {
             }
 
             // Delete button for all messages
-            auto deleteBtn = new Button("DELETE_" ~ message.id, "🗑️ Delete");
+            auto deleteBtn = new Button("DELETE_" ~ message.id, "🗑️ Delete"d);
             deleteBtn.fontSize = 10;
             deleteBtn.click = delegate(Widget source) {
                 deleteMessage(message.id);
@@ -1582,7 +1697,7 @@ class ChatWidget : HorizontalLayout {
 
         void startEditing(string blockId, string messageId) {
             if (_isEditing) return;
-            
+
             _isEditing = true;
             _originalText = text.to!string;
             _blockId = blockId;
@@ -1590,23 +1705,23 @@ class ChatWidget : HorizontalLayout {
             readOnly = false;
             backgroundColor = 0x1A1A1A; // Darker background for editing
             setFocus();
-            
+
             Log.i("MessageEditBox: Started editing block ", blockId);
         }
 
         void saveEditing() {
             if (!_isEditing) return;
-            
+
             _isEditing = false;
             readOnly = true;
-            
+
             // Restore background based on content type
             if (_blockId.canFind("CODE")) {
                 backgroundColor = 0x111111;
             } else {
                 backgroundColor = 0x1E2A38; // Default for assistant content
             }
-            
+
             // Notify parent about the change
             auto blockWidget = parent;
             if (blockWidget) {
@@ -1614,29 +1729,29 @@ class ChatWidget : HorizontalLayout {
                 if (header) {
                     auto saveBtn = header.childById(_blockId ~ "_SAVE");
                     if (saveBtn) saveBtn.visibility = Visibility.Gone;
-                    
+
                     auto editBtn = header.childById(_blockId ~ "_EDIT");
                     if (editBtn) editBtn.visibility = Visibility.Visible;
                 }
             }
-            
+
             Log.i("MessageEditBox: Saved editing for block ", _blockId);
         }
 
         void cancelEditing() {
             if (!_isEditing) return;
-            
+
             text = _originalText.to!dstring;
             _isEditing = false;
             readOnly = true;
-            
+
             // Restore background based on content type
             if (_blockId.canFind("CODE")) {
                 backgroundColor = 0x111111;
             } else {
                 backgroundColor = 0x1E2A38; // Default for assistant content
             }
-            
+
             Log.i("MessageEditBox: Cancelled editing for block ", _blockId);
         }
 
@@ -1670,7 +1785,7 @@ class ChatWidget : HorizontalLayout {
 
         void flushBlock() {
             if (currentBlock.empty && !inCodeBlock) return;
-            
+
             string blockId = format("BLOCK_%s_%d", messageId, blockCount++);
             auto blockWidget = createBlockWidget(currentBlock, blockId, inCodeBlock, role);
             container.addChild(blockWidget);
@@ -1705,7 +1820,7 @@ class ChatWidget : HorizontalLayout {
 
         // Selection checkbox (shown in bulk selection mode)
         if (_bulkSelectionMode) {
-            auto checkbox = new Button("BLOCK_CHECKBOX_" ~ blockId, "☐");
+            auto checkbox = new Button("BLOCK_CHECKBOX_" ~ blockId, "☐"d);
             checkbox.fontSize = 10;
             checkbox.minWidth(16);
             checkbox.backgroundColor = 0x3A3A3A;
@@ -1723,7 +1838,7 @@ class ChatWidget : HorizontalLayout {
         spacer.layoutWeight = 1;
         header.addChild(spacer);
 
-        auto copyBtn = new Button(blockId ~ "_COPY", "Copy");
+        auto copyBtn = new Button(blockId ~ "_COPY", "Copy"d);
         copyBtn.fontSize = 9;
         copyBtn.click = delegate(Widget source) {
             platform.setClipboardText(content.to!dstring);
@@ -1733,7 +1848,7 @@ class ChatWidget : HorizontalLayout {
 
         // Edit button (always visible for non-empty content)
         if (!content.empty) {
-            auto editBtn = new Button(blockId ~ "_EDIT", "✏️");
+            auto editBtn = new Button(blockId ~ "_EDIT", "✏️"d);
             editBtn.fontSize = 9;
             editBtn.tooltipText = "Edit this block";
             editBtn.click = delegate(Widget source) {
@@ -1744,7 +1859,7 @@ class ChatWidget : HorizontalLayout {
             header.addChild(editBtn);
 
             // Save button (hidden by default, shown during editing)
-            auto saveBtn = new Button(blockId ~ "_SAVE", "💾");
+            auto saveBtn = new Button(blockId ~ "_SAVE", "💾"d);
             saveBtn.fontSize = 9;
             saveBtn.tooltipText = "Save changes";
             saveBtn.visibility = Visibility.Gone;
@@ -1912,8 +2027,7 @@ class ChatWidget : HorizontalLayout {
      * Check if file is a source file
      */
     private bool isSourceFile(string filePath) {
-        string ext = extension(filePath).toLower();
-        return [".d", ".di", ".js", ".ts", ".py", ".rs", ".c", ".cpp", ".h", ".hpp"].canFind(ext);
+        return dcore.lang.language_profile.isSourceFile(filePath);
     }
 
     /**
@@ -2287,6 +2401,21 @@ class ChatWidget : HorizontalLayout {
                       " (threads=", to!string(result.summary.importedConversations),
                       ", messages=", to!string(result.summary.totalMessages), ")");
 
+                // Run the name scanner on the freshly-imported threads and
+                // log the count; the user can open the full dialog via 🏷 Names.
+                try {
+                    auto scanner    = new NameScanner();
+                    auto reg        = nameRegistry();
+                    auto candidates = scanner.scan(result.threads, reg.allNames());
+                    if (candidates.length > 0) {
+                        Log.i("ChatWidget: Name scanner found ",
+                              candidates.length,
+                              " candidate(s) — click 🏷 Names to review.");
+                    }
+                } catch (Exception e) {
+                    Log.w("ChatWidget: Name scan after import failed: ", e.msg);
+                }
+
                 foreach (warn; result.summary.warnings) {
                     Log.w("ChatWidget Import warning: ", warn);
                 }
@@ -2360,6 +2489,7 @@ class ChatWidget : HorizontalLayout {
                     _threadTabs.selectTab(_currentThreadId);
                 }
             }
+
         }
     }
 
@@ -2438,6 +2568,277 @@ class ChatWidget : HorizontalLayout {
             refreshChatDisplay();
             Log.i("ChatWidget: Deleted message ", messageId);
         }
+    }
+
+    /**
+     * Build a SharedConversation from the currently selected messages.
+     * If no messages are selected, include all messages in the current thread.
+     */
+    private SharedConversation buildSharedConversation() {
+        SharedConversation conv;
+
+        if (_currentThreadId in _threads) {
+            auto thread = _threads[_currentThreadId];
+            conv.title = thread.title;
+            conv.sharedAt = (cast(DateTime)Clock.currTime()).toISOExtString();
+
+            bool hasExplicitSelection = _selectedMessageIds.length > 0;
+
+            foreach (msg; thread.messages) {
+                SharedMessage sm;
+                sm.id = msg.id;
+                sm.role = msg.role.to!string;
+                sm.content = msg.content;
+                sm.timestamp = msg.timestamp.toString()[0..min(19, $)];
+                sm.isSelected = hasExplicitSelection
+                    ? _selectedMessageIds.canFind(msg.id)
+                    : true;   // no selection → share all
+                conv.messages ~= sm;
+            }
+        }
+
+        return conv;
+    }
+
+    /**
+     * Lazily initialise and return the NameRegistry, ensuring its schema exists.
+     */
+    private NameRegistry nameRegistry() {
+        if (_nameRegistry is null) {
+            _nameRegistry = new NameRegistry(_core.dbManager);
+            _nameRegistry.ensureSchema();
+        }
+        return _nameRegistry;
+    }
+
+    /**
+     * Convert current in-memory threads to ImportedChatThread[] for the scanner.
+     */
+    private ImportedChatThread[] threadsForScanner() {
+        ImportedChatThread[] result;
+        foreach (ref t; _threads) {
+            ImportedChatThread it;
+            it.id    = t.id;
+            it.title = t.title;
+            foreach (ref m; t.messages) {
+                ImportedChatMessage im;
+                im.id        = m.id;
+                im.role      = m.role;
+                im.content   = m.content;
+                im.timestamp = m.timestamp;
+                it.messagesLinear ~= im;
+            }
+            result ~= it;
+        }
+        return result;
+    }
+
+    /**
+     * Scan all threads for name candidates and open the NameRegistryDialog.
+     */
+    private void openNameRegistryDialog() {
+        auto reg       = nameRegistry();
+        auto scanner   = new NameScanner();
+        auto candidates = scanner.scan(threadsForScanner(), reg.allNames());
+        auto dlg = new NameRegistryDialog(window, reg, candidates);
+        dlg.show();
+        Log.i("ChatWidget: Opened name registry dialog (",
+              candidates.length, " candidates)");
+    }
+
+    /**
+     * Open the share dialog for the current selection (or full thread).
+     */
+    private void openShareDialog() {
+        auto conv = buildSharedConversation();
+        auto dlg = new ShareDialog(window, conv);
+        dlg.show();
+    }
+
+    /**
+     * Rebuild the history browser index from current threads.
+     * No-op if the panel has never been opened (avoids work until needed).
+     */
+    private void _openHistoryDialog() {
+        auto w = this.window;
+        if (!w) return;
+
+        auto dlg = new HistoryBrowserDialog(w);
+        dlg.buildIndex(_threads);
+        dlg.onThreadSelected  = delegate(string id) { jumpToThread(id); };
+        dlg.onMessageSelected = delegate(string tid, string mid) { jumpToMessage(tid, mid); };
+        dlg.show();
+    }
+
+    /**
+     * Jump to a thread by ID — selects the tab and refreshes the display.
+     * Safe to call from the history browser delegate.
+     */
+    void jumpToThread(string threadId) {
+        if (threadId.empty || threadId !in _threads) return;
+        if (threadId == _currentThreadId) return;
+
+        _suppressTabChange = true;
+        scope(exit) _suppressTabChange = false;
+
+        _currentThreadId = threadId;
+        _threadTabs.selectTab(threadId);
+
+        _suppressTabChange = false;
+        refreshChatDisplay();
+        updateThreadBar();
+
+        Log.i("ChatWidget: Jumped to thread ", threadId);
+    }
+
+    /**
+     * Jump to a specific message within a thread.
+     * Switches to the thread then scrolls to the approximate message position.
+     */
+    void jumpToMessage(string threadId, string messageId) {
+        jumpToThread(threadId);
+
+        if (messageId.empty || threadId !in _threads) return;
+
+        auto thread = _threads[threadId];
+        int idx = -1;
+        foreach (i, ref m; thread.messages) {
+            if (m.id == messageId) { idx = cast(int) i; break; }
+        }
+        if (idx < 0) return;
+
+        if (_chatScroll && _chatScroll.vscrollbar) {
+            int total  = cast(int) thread.messages.length;
+            int maxPos = _chatScroll.vscrollbar.maxValue;
+            if (total > 1)
+                _chatScroll.vscrollbar.position = maxPos * idx / (total - 1);
+        }
+
+        Log.i("ChatWidget: Jumped to message ", messageId, " in thread ", threadId);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Export
+    // ──────────────────────────────────────────────────────────────────────
+
+    /**
+     * Show the Export popup menu anchored below the Export button.
+     */
+    private void _showExportMenu(Widget anchor) {
+        auto root = new MenuItem(null);
+        root.add(new MenuItem(new Action(1, "Export thread as Markdown"d)));
+        root.add(new MenuItem(new Action(2, "Export thread as JSON"d)));
+        root.addSeparator();
+        root.add(new MenuItem(new Action(3, "Export selected messages..."d)));
+
+        auto menu = new PopupMenu(root);
+        menu.menuItemAction = (const Action a) {
+            switch (a.id) {
+                case 1: _exportThreadMarkdown(); return true;
+                case 2: _exportThreadJson();     return true;
+                case 3:
+                    // Enter selection mode so the user can pick messages,
+                    // then use the bulk-action bar Export button.
+                    if (!_bulkSelectionMode) toggleBulkSelectionMode();
+                    return true;
+                default: return false;
+            }
+        };
+
+        auto w = this.window;
+        if (w) {
+            auto popup = w.showPopup(menu, anchor, PopupAlign.Below);
+            popup.flags = PopupFlags.CloseOnClickOutside;
+        }
+    }
+
+    /**
+     * Export the current thread as a Markdown document via a save dialog.
+     */
+    private void _exportThreadMarkdown() {
+        if (_currentThreadId.empty || _currentThreadId !in _threads) return;
+        auto thread = _threads[_currentThreadId];
+
+        auto sb = appender!string();
+        sb.put("# ");
+        sb.put(thread.title);
+        sb.put("\n\n");
+        sb.put(format("*Source: %s — %d messages — exported %s*\n\n---\n\n",
+                      thread.source == "imported_chatgpt" ? "ChatGPT import" : "local",
+                      thread.messages.length,
+                      (cast(DateTime) Clock.currTime()).toISOExtString()));
+
+        foreach (ref m; thread.messages) {
+            string roleLabel;
+            final switch (m.role) {
+                case AIMessage.Role.User:      roleLabel = "**You**";        break;
+                case AIMessage.Role.Assistant: roleLabel = "**Assistant**";  break;
+                case AIMessage.Role.System:    roleLabel = "**System**";     break;
+                case AIMessage.Role.Tool:      roleLabel = "**Tool**";       break;
+            }
+            sb.put(roleLabel);
+            sb.put(format(" *%s*\n\n", m.timestamp.toISOExtString()));
+            sb.put(m.content);
+            sb.put("\n\n---\n\n");
+        }
+
+        _saveWithDialog(sb.data, thread.title ~ ".md",
+                        "Markdown (*.md)"d, "*.md");
+    }
+
+    /**
+     * Export the current thread as JSON (re-importable) via a save dialog.
+     */
+    private void _exportThreadJson() {
+        if (_currentThreadId.empty || _currentThreadId !in _threads) return;
+        exportConversation(_currentThreadId, "");   // builds JSON internally
+
+        // exportConversation writes to outputPath; when empty we route through dialog.
+        // Re-use the export logic inline so we can feed it to the dialog.
+        auto thread = _threads[_currentThreadId];
+        JSONValue root_ = JSONValue.emptyObject;
+        root_["title"]  = thread.title;
+        root_["source"] = thread.source;
+        root_["created"] = thread.created.toISOExtString();
+        root_["messages"] = JSONValue.emptyArray;
+        foreach (ref m; thread.messages) {
+            JSONValue mj = JSONValue.emptyObject;
+            mj["role"]      = m.role.to!string;
+            mj["content"]   = m.content;
+            mj["timestamp"] = m.timestamp.toISOExtString();
+            mj["source"]    = m.source;
+            root_["messages"].array ~= mj;
+        }
+
+        _saveWithDialog(root_.toPrettyString(), thread.title ~ ".json",
+                        "JSON (*.json)"d, "*.json");
+    }
+
+    /**
+     * Open a file-save dialog and write content to the chosen path.
+     */
+    private void _saveWithDialog(string content, string suggestedName,
+                                  dstring filterLabel, string filterGlob) {
+        auto w = this.window;
+        if (!w) {
+            Log.w("ChatWidget: Cannot open save dialog — no parent window");
+            return;
+        }
+
+        auto dlg = new FileDialog(UIString.fromRaw("Export Chat"d), w);
+        dlg.addFilter(FileFilterEntry(UIString.fromRaw(filterLabel), filterGlob));
+
+        dlg.dialogResult = delegate(Dialog sender, const Action result) {
+            string path = result.stringParam;
+            if (path.empty) return;
+            try {
+                std.file.write(path, content);
+                Log.i("ChatWidget: Exported to ", path);
+            } catch (Exception e) {
+                Log.e("ChatWidget: Export failed: ", e.msg);
+            }
+        };
+        dlg.show();
     }
 
     /**

@@ -93,6 +93,10 @@ class DCoreIntegrationManager
 
         if (_dcoreInstance && _cccoreInstance)
         {
+            // Wire CCCore + mainWindow into DCore so AI integration, workspace
+            // lookups, and dialog parents all work correctly.
+            _dcoreInstance.setCCCoreReferences(_cccoreInstance, _mainWindow);
+
             _initialized = true;
             Log.i("✅ DCore Integration Manager initialized successfully");
             Log.i("   - DCore instance: ", _dcoreInstance ? "Ready" : "Missing");
