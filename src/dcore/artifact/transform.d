@@ -60,9 +60,34 @@ class InProcessTransform : Transform {
 }
 
 /**
- * ExternalToolTransform - Runs a command through ToolManager with the input
- * artifacts' source paths appended as arguments. Stdout becomes a single
- * text artifact of `outputKind`, delivered via onCompleted.
+ * PipedCommandTool - CommandTool that writes `input` to the process stdin.
+ */
+class PipedCommandTool : CommandTool {
+    string input;
+
+    this(string id, string name, string command, string[] defaultArgs = [], string description = "") {
+        super(id, name, command, defaultArgs, description);
+    }
+
+    override bool execute(string[] arguments = []) {
+        if (!super.execute(arguments))
+            return false;
+        try {
+            if (input.length)
+                _pipes.stdin.write(input);
+            _pipes.stdin.close();
+        } catch (Exception e) {
+            Log.e("PipedCommandTool: Error writing stdin: ", id, " - ", e.msg);
+        }
+        return true;
+    }
+}
+
+/**
+ * ExternalToolTransform - Runs a command through ToolManager. By default the
+ * input artifacts' source paths are appended as arguments; with `pipeText`
+ * their text is written to stdin instead. Stdout becomes a single text
+ * artifact of `outputKind`, delivered via onCompleted.
  */
 class ExternalToolTransform : Transform {
     import dcore.utils.signals : Signal;
@@ -74,13 +99,15 @@ class ExternalToolTransform : Transform {
     private string _command;
     private string[] _args;
     private string _outputKind;
+    private bool _pipeText;
     private ToolManager _toolManager;
-    private CommandTool _tool;
+    private PipedCommandTool _tool;
     private string _output;
+    private string _errors;
     private int _exitCode;
 
     this(ToolManager toolManager, string id, string name, string[] kinds,
-         string command, string[] args = [], string outputKind = "text") {
+         string command, string[] args = [], string outputKind = "text", bool pipeText = false) {
         _toolManager = toolManager;
         _id = id;
         _name = name;
@@ -88,7 +115,18 @@ class ExternalToolTransform : Transform {
         _command = command;
         _args = args;
         _outputKind = outputKind;
+        _pipeText = pipeText;
     }
+
+    /// Shell command line run via `sh -c`, with element text piped to stdin.
+    static ExternalToolTransform shellPipe(ToolManager toolManager, string commandLine) {
+        import std.digest.crc : crc32Of, toHexString;
+        string id = "pipe." ~ toHexString(crc32Of(commandLine)).idup;
+        return new ExternalToolTransform(toolManager, id, commandLine, [],
+                                         "sh", ["-c", commandLine], "text", true);
+    }
+
+    @property bool running() { return _tool !is null && _tool.running; }
 
     @property string id() { return _id; }
     @property string name() { return _name; }
@@ -103,31 +141,51 @@ class ExternalToolTransform : Transform {
             return [];
         }
 
+        return run(inputs, null);
+    }
+
+    /// Run with explicit stdin text (used when piping a single context element).
+    Artifact[] run(Artifact[] inputs, string stdinText) {
+        if (_toolManager is null) {
+            Log.e("ExternalToolTransform: No ToolManager for ", _id);
+            return [];
+        }
+
         string toolId = "transform." ~ _id;
         if (_tool is null) {
-            _tool = new CommandTool(toolId, _name, _command, _args, "Artifact transform");
+            _tool = new PipedCommandTool(toolId, _name, _command, _args, "Artifact transform");
             _tool.onOutput.connect((string s) { _output ~= s; });
+            _tool.onError.connect((string s) { _errors ~= s; });
             _tool.onExitCode.connect((int code) { _exitCode = code; });
             _tool.onFinished.connect(&handleFinished);
             _toolManager.registerTool(_tool);
         }
 
         _output = null;
+        _errors = null;
         _exitCode = 0;
-        string[] paths = inputs.map!(a => a.sourcePath).filter!(p => p.length > 0).array;
-        if (!_toolManager.executeTool(toolId, paths))
+        string[] args;
+        if (_pipeText) {
+            if (stdinText is null)
+                stdinText = inputs.map!(a => a.text()).join("\n");
+            _tool.input = stdinText;
+        } else {
+            _tool.input = null;
+            args = inputs.map!(a => a.sourcePath).filter!(p => p.length > 0).array;
+        }
+        if (!_toolManager.executeTool(toolId, args))
             Log.e("ExternalToolTransform: Failed to start ", _command);
         return [];
     }
 
     private void handleFinished() {
+        string text = _output;
         if (_exitCode != 0) {
             Log.w("ExternalToolTransform: ", _id, " exited with ", _exitCode);
-            onCompleted.emit([]);
-            return;
+            text ~= "\n[exit " ~ _exitCode.to!string ~ "]\n" ~ _errors;
         }
-        auto result = new TextArtifact(_id ~ ":out", _outputKind, _name ~ " output");
-        result.setText(_output);
+        auto result = new TextArtifact(_id ~ ":out", _outputKind, "$ " ~ _name);
+        result.setText(text);
         onCompleted.emit([cast(Artifact)result]);
     }
 }

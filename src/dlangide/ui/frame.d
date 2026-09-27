@@ -39,6 +39,8 @@ import dcore.widgets.filesystembrowser;
 import dcore.notebooks.notebook_manager;
 import dcore.notebooks.integration;
 import dcore.lang.language_profile;
+import dcore.artifact.artifact;
+import dlangide.ui.artifactpanel;
 
 import dlangide.workspace.workspace;
 import dlangide.workspace.project;
@@ -538,14 +540,14 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
     }
 
     /// Register `filename` with the artifact layer if its extension maps to an artifact kind.
-    private void resolveArtifact(string filename)
+    private Artifact resolveArtifact(string filename)
     {
         import dlangide.ui.dcore_integration : getDCoreIntegration;
         auto integration = getDCoreIntegration();
         if (!integration || !integration.getDCore() || !integration.getDCore().artifactManager)
-            return;
+            return null;
         string wsDir = currentWorkspace ? currentWorkspace.dir : null;
-        integration.getDCore().artifactManager.resolve(filename, wsDir);
+        return integration.getDCore().artifactManager.resolve(filename, wsDir);
     }
 
     bool openSourceFile(string filename, ProjectSourceFile file = null, bool activate = true)
@@ -607,7 +609,7 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
                     editor.editorTool = new DefaultEditorTool(this);
                 _tabs.layout(_tabs.pos);
                 editor.editorStateChange = _statusLine;
-                resolveArtifact(filename);
+                updateArtifactPanel(filename);
             }
             else
             {
@@ -779,8 +781,51 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         }
     }
 
+    static immutable ARTIFACT_DOCK_ID = "ARTIFACT_DOCK";
+    private ArtifactPanel _artifactPanel;
+    void toggleArtifactPanel()
+    {
+        auto artifactDock = _dockHost.childById!DockWindow(ARTIFACT_DOCK_ID);
+        if (artifactDock)
+        {
+            artifactDock.visibility = artifactDock.visibility == Visibility.Visible ?
+                Visibility.Gone : Visibility.Visible;
+            if (artifactDock.visibility == Visibility.Visible)
+                updateArtifactPanel(_tabs.selectedTabId);
+        }
+        else
+        {
+            import dlangide.ui.dcore_integration : getDCoreIntegration;
+            auto integration = getDCoreIntegration();
+            _artifactPanel = new ArtifactPanel(integration ? integration.getDCore() : null);
+            _artifactPanel.refreshRequested = () { updateArtifactPanel(_tabs.selectedTabId); };
+            artifactDock = new DockWindow(ARTIFACT_DOCK_ID);
+            artifactDock.caption.text = "Artifact Context"d;
+            artifactDock.dockAlignment = DockAlignment.Right;
+            artifactDock.layoutWidth = 340;
+            artifactDock.bodyWidget = _artifactPanel;
+            _dockHost.addDockedWindow(artifactDock);
+            updateArtifactPanel(_tabs.selectedTabId);
+        }
+    }
+
+    /// Point the artifact panel at the artifact for `filename`, synced with the editor buffer.
+    private void updateArtifactPanel(string filename)
+    {
+        if (!_artifactPanel)
+            return;
+        auto a = filename.length ? resolveArtifact(filename) : null;
+        if (a && a.textBacked)
+        {
+            if (auto editor = getSourceEdit(_tabs.tabBody(filename)))
+                a.setText(editor.text.to!string);
+        }
+        _artifactPanel.setArtifact(a, currentWorkspace ? currentWorkspace.dir : null);
+    }
+
     void onTabChanged(string newActiveTabId, string previousTabId)
     {
+        updateArtifactPanel(newActiveTabId);
         int index = _tabs.tabIndex(newActiveTabId);
         if (index >= 0)
         {
@@ -1123,7 +1168,8 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         editItem.add(ACTION_EDIT_PREFERENCES);
 
         MenuItem viewItem = new MenuItem(new Action(3, "MENU_VIEW"));
-        viewItem.add(ACTION_WINDOW_SHOW_HOME_SCREEN, ACTION_WINDOW_SHOW_WORKSPACE_EXPLORER, ACTION_WINDOW_SHOW_LOG_WINDOW);
+        viewItem.add(ACTION_WINDOW_SHOW_HOME_SCREEN, ACTION_WINDOW_SHOW_WORKSPACE_EXPLORER, ACTION_WINDOW_SHOW_LOG_WINDOW,
+            ACTION_VIEW_ARTIFACT_PANEL);
         viewItem.addSeparator();
         viewItem.addCheck(ACTION_VIEW_TOGGLE_TOOLBAR);
         viewItem.addCheck(ACTION_VIEW_TOGGLE_STATUSBAR);
@@ -1685,6 +1731,16 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
             case IDEActions.WindowToggleTerminal:
                 toggleTerminal();
                 return true;
+            case IDEActions.ViewArtifactPanel:
+                toggleArtifactPanel();
+                return true;
+            case IDEActions.ArtifactCopyText:
+            case IDEActions.ArtifactCopyJson:
+            case IDEActions.ArtifactRunTransform:
+            case IDEActions.ArtifactSendToProgram:
+            case IDEActions.ArtifactAddToAI:
+            case IDEActions.ArtifactPaste:
+                return _artifactPanel ? _artifactPanel.handleArtifactAction(a) : false;
             case IDEActions.HelpAbout:
                 //debug {
                 //    testDCDFailAfterThreadCreation();

@@ -11,6 +11,7 @@ import std.string;
 import std.utf;
 
 import dcore.artifact.artifact;
+import dcore.artifact.element;
 import dcore.artifact.kind;
 import dcore.artifact.transform;
 
@@ -60,6 +61,24 @@ class LyricsArtifact : TextArtifact {
         metadata["sections"] = JSONValue(arr);
         metadata["lineCount"] = total;
         metadataChanged();
+    }
+
+    override protected ContextElement[] structureElements() {
+        auto root = new ContextElement(id ~ "#sections", "Sections", "sections");
+        foreach (i, s; sections) {
+            string label = s.name.length ? s.name : "(intro)";
+            auto sec = root.add(new ContextElement(format("%s#section/%d", id, i),
+                format("%s (%d)", label, s.lines.length), "section",
+                "[" ~ label ~ "]\n" ~ s.lines.join("\n")));
+            JSONValue d = parseJSON("{}");
+            d["name"] = label;
+            d["line"] = s.headerLine;
+            d["lines"] = JSONValue(s.lines.dup);
+            sec.data = d;
+            foreach (j, l; s.lines)
+                sec.add(new ContextElement(format("%s#section/%d/line/%d", id, i, j), l, "line", l));
+        }
+        return [root];
     }
 }
 

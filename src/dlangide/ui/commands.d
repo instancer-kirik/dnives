@@ -104,6 +104,15 @@ enum IDEActions : int
     // Design & Style Actions
     ViewFontShowcase,
     ViewPreviewPanel,
+
+    // Artifact Context Actions
+    ViewArtifactPanel,
+    ArtifactCopyText,
+    ArtifactCopyJson,
+    ArtifactRunTransform,
+    ArtifactSendToProgram,
+    ArtifactAddToAI,
+    ArtifactPaste,
 }
 
 __gshared static this()
@@ -300,6 +309,15 @@ const Action ACTION_AI_IMPORT_CHATGPT = (
 // Design & Style Actions
 const Action ACTION_VIEW_FONT_SHOWCASE = new Action(IDEActions.ViewFontShowcase, "MENU_VIEW_FONT_SHOWCASE"c, "font");
 const Action ACTION_VIEW_PREVIEW_PANEL = new Action(IDEActions.ViewPreviewPanel, "MENU_VIEW_PREVIEW_PANEL"c, "mobile");
+
+// Artifact Context Actions
+const Action ACTION_VIEW_ARTIFACT_PANEL = new Action(IDEActions.ViewArtifactPanel, "MENU_VIEW_ARTIFACT_PANEL"c);
+const Action ACTION_ARTIFACT_COPY_TEXT = new Action(IDEActions.ArtifactCopyText, "MENU_ARTIFACT_COPY_TEXT"c);
+const Action ACTION_ARTIFACT_COPY_JSON = new Action(IDEActions.ArtifactCopyJson, "MENU_ARTIFACT_COPY_JSON"c);
+const Action ACTION_ARTIFACT_RUN_TRANSFORM = new Action(IDEActions.ArtifactRunTransform, "MENU_ARTIFACT_RUN_TRANSFORM"c);
+const Action ACTION_ARTIFACT_SEND_TO_PROGRAM = new Action(IDEActions.ArtifactSendToProgram, "MENU_ARTIFACT_SEND_TO_PROGRAM"c);
+const Action ACTION_ARTIFACT_ADD_TO_AI = new Action(IDEActions.ArtifactAddToAI, "MENU_ARTIFACT_ADD_TO_AI"c);
+const Action ACTION_ARTIFACT_PASTE = new Action(IDEActions.ArtifactPaste, "MENU_ARTIFACT_PASTE"c);
 
 const Action[] STD_IDE_ACTIONS = [
     ACTION_EDIT_COPY, ACTION_EDIT_PASTE, ACTION_EDIT_CUT,

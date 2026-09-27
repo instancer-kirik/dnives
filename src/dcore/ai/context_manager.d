@@ -280,6 +280,9 @@ class ContextManager {
             }
         }
 
+        // Add pinned global context (e.g. artifact elements)
+        contextItems ~= _globalContext;
+
         // Sort by priority and relevance
         contextItems.sort!((a, b) =>
             a.priority < b.priority ||
@@ -760,6 +763,7 @@ class ContextManager {
      * Add global context item
      */
     void addGlobalContext(string id, string content, ContextPriority priority, string source) {
+        removeGlobalContext(id);
         auto item = ContextItem(id, content, priority, source);
         _globalContext ~= item;
     }

@@ -4,11 +4,14 @@ import dlangui.core.logger;
 
 import std.algorithm;
 import std.array;
+import std.format;
 import std.path;
+import std.string;
 
 import dcore.artifact.artifact;
 import dcore.artifact.kind;
 import dcore.artifact.transform;
+import dcore.tools.toolmanager;
 
 /**
  * ArtifactManager - Tracks artifacts per workspace and the available transforms.
@@ -23,6 +26,8 @@ class ArtifactManager {
 
     private Artifact[string][string] _artifacts; // workspace dir -> id -> artifact
     private Transform[string] _transforms;
+    private ExternalToolTransform[string] _pipes; // command line -> transform
+    private int _scratchCounter;
 
     this() {
         Log.i("ArtifactManager: Initializing");
@@ -93,13 +98,59 @@ class ArtifactManager {
         _artifacts.remove(workspaceDir.length ? buildNormalizedPath(workspaceDir) : "");
     }
 
+    /**
+     * Create an in-memory text artifact (e.g. from pasted text) in `workspaceDir`.
+     */
+    TextArtifact createScratch(string text, string workspaceDir = null) {
+        string ws = workspaceDir.length ? buildNormalizedPath(workspaceDir) : "";
+        string id = format("scratch:%d", ++_scratchCounter);
+        auto a = new TextArtifact(id, "text", format("Scratch %d", _scratchCounter));
+        a.setText(text);
+        _artifacts[ws][id] = a;
+        onArtifactOpened.emit(a);
+        return a;
+    }
+
+    /// Scratch artifacts of `workspaceDir`, oldest first.
+    Artifact[] scratchArtifacts(string workspaceDir) {
+        return artifacts(workspaceDir).filter!(a => a.id.startsWith("scratch:"))
+                                      .array.sort!((a, b) => a.id < b.id).release;
+    }
+
+    /**
+     * Run a registered transform; outputs are attached to the first input.
+     */
     Artifact[] runTransform(string transformId, Artifact[] inputs) {
         auto t = getTransform(transformId);
         if (t is null) {
             Log.w("ArtifactManager: Unknown transform ", transformId);
             return [];
         }
-        return t.apply(inputs);
+        auto outputs = t.apply(inputs);
+        if (inputs.length && outputs.length)
+            inputs[0].addDerived(outputs);
+        return outputs;
+    }
+
+    /**
+     * Pipe `text` to a shell command line through ToolManager. Stdout is
+     * delivered asynchronously to `done` (on the tool's thread).
+     */
+    void pipeToCommand(ToolManager toolManager, string commandLine, string text,
+                       void delegate(Artifact[]) done) {
+        auto p = commandLine in _pipes;
+        ExternalToolTransform t = p ? *p : null;
+        if (t is null) {
+            t = ExternalToolTransform.shellPipe(toolManager, commandLine);
+            _pipes[commandLine] = t;
+        }
+        if (t.running) {
+            Log.w("ArtifactManager: Command still running: ", commandLine);
+            return;
+        }
+        t.onCompleted.clear();
+        t.onCompleted.connect(done);
+        t.run([], text);
     }
 
     void cleanup() {
