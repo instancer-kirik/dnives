@@ -26,6 +26,7 @@ import dcore.lsp.lspmanager;
 import dcore.editor.editormanager;
 import dcore.db.dbmanager;
 import dcore.tools.toolmanager;
+import dcore.artifact.manager;
 
 // AI system imports
 import dcore.ai.integration;
@@ -53,6 +54,7 @@ class DCore {
     private EditorManager _editorManager;
     private DBManager _dbManager;
     private ToolManager _toolManager;
+    private ArtifactManager _artifactManager;
 
     // Optional systems
     private AIIntegration _aiIntegration;
@@ -97,6 +99,7 @@ class DCore {
     @property EditorManager editorManager() { return _editorManager; }
     @property DBManager dbManager() { return _dbManager; }
     @property ToolManager toolManager() { return _toolManager; }
+    @property ArtifactManager artifactManager() { return _artifactManager; }
 
     // TODO: Implement these managers
     @property UIManager uiManager() { return _uiManager; }
@@ -161,6 +164,10 @@ class DCore {
             _toolManager = new ToolManager(this, toolsConfigPath);
             _toolManager.initialize();
 
+            // Initialize artifact manager
+            _artifactManager = new ArtifactManager();
+            _artifactManager.initialize();
+
             // Initialize AI system
             _aiIntegration = new AIIntegration(this, null, null); // CCCore and MainWindow set later
 
@@ -192,6 +199,11 @@ class DCore {
             // Cleanup notebooks
             if (_notebookIntegration !is null) {
                 shutdownNotebookSystem();
+            }
+
+            // Cleanup artifacts
+            if (_artifactManager !is null) {
+                _artifactManager.cleanup();
             }
 
             // Cleanup tools

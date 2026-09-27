@@ -537,6 +537,17 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         return false;
     }
 
+    /// Register `filename` with the artifact layer if its extension maps to an artifact kind.
+    private void resolveArtifact(string filename)
+    {
+        import dlangide.ui.dcore_integration : getDCoreIntegration;
+        auto integration = getDCoreIntegration();
+        if (!integration || !integration.getDCore() || !integration.getDCore().artifactManager)
+            return;
+        string wsDir = currentWorkspace ? currentWorkspace.dir : null;
+        integration.getDCore().artifactManager.resolve(filename, wsDir);
+    }
+
     bool openSourceFile(string filename, ProjectSourceFile file = null, bool activate = true)
     {
         if (!file && !filename)
@@ -596,6 +607,7 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
                     editor.editorTool = new DefaultEditorTool(this);
                 _tabs.layout(_tabs.pos);
                 editor.editorStateChange = _statusLine;
+                resolveArtifact(filename);
             }
             else
             {
