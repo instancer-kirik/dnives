@@ -75,9 +75,37 @@
     <style id="TERMINAL"
         backgroundColor="#1E1E2E"
         textColor="#CDD6F4"
-        fontFace="DejaVu Sans Mono,Monospace,Courier New"
-        fontFamily="Monospace"
+        fontFace="DejaVu Sans Mono,Liberation Mono,Courier New"
+        fontFamily="MonoSpace"
         fontSize="14"
     />
+
+    <style id="TERM_BAR"
+        backgroundColor="#181825"
+        textColor="#CDD6F4"
+        layoutWidth="FILL_PARENT"
+        layoutHeight="WRAP_CONTENT"
+        padding="6,4,6,4"
+    />
+    <style id="TERM_BAR_LABEL"
+        textColor="#A6E3A1"
+        fontSize="12"
+        padding="4,2,10,2"
+        backgroundImageId="@null"
+    />
+    <style id="TERM_BAR_BUTTON" parent="BUTTON"
+        backgroundColor="#313244"
+        backgroundImageId="@null"
+        textColor="#CDD6F4"
+        fontSize="12"
+        padding="10,4,10,4"
+        margins="3,0,3,0"
+        minWidth="28"
+        minHeight="22"
+        >
+        <state state_hovered="true" backgroundColor="#45475A" textColor="#89B4FA"/>
+        <state state_pressed="true" backgroundColor="#89B4FA" textColor="#11111B"/>
+        <state state_focused="true" textColor="#89B4FA"/>
+    </style>
 
 </theme>

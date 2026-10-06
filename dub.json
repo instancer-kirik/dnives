@@ -34,6 +34,17 @@
       ]
     },
     {
+      "name": "tty",
+      "targetName": "tty",
+      "versions": ["SoloTerminal"],
+      "excludedSourceFiles": [
+        "src/app_minimal.d",
+        "src/app_ultraminimal.d",
+        "src/dcore_demo.d",
+        "src/dlangide_legacy.d"
+      ]
+    },
+    {
       "name": "minimal",
       "subConfigurations": {
         "dlangui": "minimal"

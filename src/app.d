@@ -30,6 +30,13 @@ else
 
 mixin APP_ENTRY_POINT;
 
+// Runs before the UI loads theme_default. Debug logging prints that whole
+// theme to the console and stalls startup for several seconds.
+shared static this() {
+    import dlangui.core.logger : Log, LogLevel;
+    Log.setLogLevel(LogLevel.Info);
+}
+
 /// Global DCore instance
 DCore dcoreInstance;
 CCCore cccoreInstance;
@@ -117,6 +124,25 @@ extern (C) int UIAppMain(string[] args)
             FontManager.fontGamma = 0.85;
             FontManager.hintingMode = HintingMode.AutoHint;
         }
+    }
+
+    bool soloTerminal;
+    version (SoloTerminal)
+        soloTerminal = true;
+    foreach (arg; args) {
+        if (arg == "--terminal")
+            soloTerminal = true;
+    }
+    if (soloTerminal) {
+        import dlangide.ui.terminalpanel;
+        Log.i("Starting tty");
+        Window window = Platform.instance.createWindow("tty", null, WindowFlag.Resizable, 1100, 720);
+        auto panel = new TerminalPanel();
+        panel.effects = true;
+        window.mainWidget = panel;
+        window.show();
+        panel.focusTerminal();
+        return Platform.instance.enterMessageLoop();
     }
 
     Log.i("Initializing Dnives IDE core systems");

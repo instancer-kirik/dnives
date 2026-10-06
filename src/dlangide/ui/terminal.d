@@ -183,6 +183,10 @@ struct TerminalContent {
         this.font = font;
         this.charw = font.charWidth('0');
         this.charh = font.height;
+        if (charw < 1)
+            charw = 8;
+        if (charh < 1)
+            charh = 16;
         int w = rc.width / charw;
         int h = rc.height / charh;
         setViewSize(w, h);
@@ -212,6 +216,10 @@ struct TerminalContent {
                 TerminalChar ch = x < p.line.length ? p.line[x] : TerminalChar.init;
                 uint bgcolor = attrToColor(ch.attr.bgColor);
                 uint textcolor = attrToColor(ch.attr.textColor);
+                if (cellSelected(x, i + topLine)) {
+                    bgcolor = 0x3A6EA5;
+                    textcolor = 0xFFFFFF;
+                }
                 if (isCursorPos && focused) {
                     // invert
                     uint tmp = bgcolor;
@@ -264,10 +272,14 @@ struct TerminalContent {
             x = 0;
         TerminalLine * line = getLine(y);
         if (x >= width) {
-            line.markLineOverflow();
-            y++;
-            line = getLine(y);
-            x = 0;
+            if (!_lineWrap) {
+                x = width > 0 ? width - 1 : 0;
+            } else {
+                line.markLineOverflow();
+                y++;
+                line = getLine(y);
+                x = 0;
+            }
         }
         line.putCharAt(ch, x, currentAttr);
         ensureCursorIsVisible();
@@ -346,6 +358,86 @@ struct TerminalContent {
         topLine = y;
     }
 
+    int selX0 = -1, selY0, selX1, selY1;
+
+    bool hasSelection() { return selX0 >= 0; }
+
+    void clearSelection() { selX0 = -1; }
+
+    void setSelection(int x0, int y0, int x1, int y1) {
+        selX0 = x0; selY0 = y0; selX1 = x1; selY1 = y1;
+    }
+
+    bool cellSelected(int x, int y) {
+        if (selX0 < 0)
+            return false;
+        long a = cast(long)selY0 * 100000 + selX0;
+        long b = cast(long)selY1 * 100000 + selX1;
+        if (a > b) { auto t = a; a = b; b = t; }
+        long c = cast(long)y * 100000 + x;
+        return c >= a && c <= b;
+    }
+
+    void cellAt(int px, int py, out int x, out int y) {
+        x = charw > 0 ? (px - rc.left) / charw : 0;
+        y = charh > 0 ? topLine + (py - rc.top) / charh : 0;
+        if (x < 0) x = 0;
+        if (x >= width) x = width > 0 ? width - 1 : 0;
+        if (y < 0) y = 0;
+        if (y >= cast(int)lines.length)
+            y = lines.length ? cast(int)lines.length - 1 : 0;
+    }
+
+    void selectWordAt(int x, int y) {
+        if (y < 0 || y >= cast(int)lines.length) {
+            setSelection(x, y, x, y);
+            return;
+        }
+        auto line = lines[y].line;
+        int a = x, b = x;
+        bool word(dchar ch) { return ch > ' ' && ch != '(' && ch != ')' && ch != '"' && ch != '\''; }
+        while (a > 0 && a < cast(int)line.length && word(line[a - 1].ch))
+            a--;
+        while (b + 1 < cast(int)line.length && word(line[b + 1].ch))
+            b++;
+        setSelection(a, y, b, y);
+    }
+
+    void selectAll() {
+        if (!lines.length) {
+            clearSelection();
+            return;
+        }
+        int last = cast(int)lines.length - 1;
+        int endx = cast(int)lines[last].line.length;
+        if (endx > 0) endx--;
+        setSelection(0, 0, endx, last);
+    }
+
+    dstring selectedText() {
+        if (!hasSelection())
+            return null;
+        int x0 = selX0, y0 = selY0, x1 = selX1, y1 = selY1;
+        if (y0 > y1 || (y0 == y1 && x0 > x1)) {
+            auto tx = x0; x0 = x1; x1 = tx;
+            auto ty = y0; y0 = y1; y1 = ty;
+        }
+        dchar[] out_;
+        for (int y = y0; y <= y1 && y < cast(int)lines.length; y++) {
+            auto line = lines[y].line;
+            int from = y == y0 ? x0 : 0;
+            int to = y == y1 ? x1 : cast(int)line.length - 1;
+            if (from < 0) from = 0;
+            for (int x = from; x <= to && x < cast(int)line.length; x++)
+                out_ ~= line[x].ch;
+            if (y < y1)
+                out_ ~= '\n';
+        }
+        while (out_.length && (out_[$-1] == ' ' || out_[$-1] == '\n'))
+            out_.length--;
+        return cast(dstring)out_;
+    }
+
 }
 
 class TerminalWidget : WidgetGroup, OnScrollHandler {
@@ -355,6 +447,15 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
     protected bool _interactive;
     private bool _pendingCreate = false;
     public bool verboseMode = false;
+    /// Sparks on typing, burst on Enter.
+    public bool effects = true;
+    /// Panel handles tab and split shortcuts before the shell sees them.
+    bool delegate(KeyEvent) hostKey;
+    void delegate(TerminalWidget) hostFocus;
+    private TermParticle[] _particles;
+    private Random _rnd;
+    private ulong _fxTimer;
+    private bool _selecting;
     this() {
         this(null, false);
     }
@@ -367,6 +468,7 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
         _verticalScrollBar.minValue = 0;
         _verticalScrollBar.scrollEvent = this;
         addChild(_verticalScrollBar);
+        _rnd = Random(unpredictableSeed);
         _device = new TerminalDevice();
         if (interactive) {
             _pendingCreate = true;
@@ -452,6 +554,8 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
     bool handleTextInput(dstring str) {
         import std.utf;
         string s8 = toUTF8(str);
+        if (effects && str.length && str[0] >= ' ')
+            burstAtCursor(14, 3.2f);
         if (_echo)
             write(s8);
         if (_device)
@@ -470,6 +574,30 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
             return true;
         }
         if (event.action == KeyAction.KeyDown) {
+            bool ctrl = (event.flags & KeyFlag.Control) != 0;
+            bool shift = (event.flags & KeyFlag.Shift) != 0;
+            if (ctrl && event.keyCode == KeyCode.TAB)
+                return false;
+            if (hostKey && ctrl && shift && hostKey(event))
+                return true;
+            if (ctrl && event.keyCode == KeyCode.KEY_C) {
+                if (_content.hasSelection()) {
+                    copySelection();
+                    return true;
+                }
+                return handleTextInput("\x03");
+            }
+            if ((ctrl && event.keyCode == KeyCode.KEY_V) || (shift && event.keyCode == KeyCode.INS)) {
+                pasteClipboard();
+                return true;
+            }
+            if (ctrl && shift && event.keyCode == KeyCode.KEY_A) {
+                _content.selectAll();
+                invalidate();
+                return true;
+            }
+            if (effects && event.keyCode == KeyCode.RETURN)
+                burstAtCursor(90, 7.0f);
             dstring flagsstr;
             dstring flagsstr2;
             dstring flagsstr3;
@@ -617,6 +745,7 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
             _pendingCreate = false;
             _setupDevice(true);
         }
+        notifyPtySize();
         if (outputChars.length) {
             // push buffered text
             write(""d);
@@ -637,6 +766,161 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
         applyPadding(rc);
         _verticalScrollBar.onDraw(buf);
         _content.draw(buf);
+        drawParticles(buf);
+    }
+
+    override bool onMouseEvent(MouseEvent event) {
+        if (event.action == MouseAction.ButtonDown && event.button == MouseButton.Right) {
+            showTermMenu(event.x, event.y);
+            return true;
+        }
+        if (event.action == MouseAction.ButtonDown && event.button == MouseButton.Middle) {
+            pasteClipboard();
+            return true;
+        }
+        if (event.action == MouseAction.ButtonDown && event.button == MouseButton.Left) {
+            setFocus();
+            int x, y;
+            _content.cellAt(event.x, event.y, x, y);
+            if (event.doubleClick)
+                _content.selectWordAt(x, y);
+            else if (event.tripleClick)
+                _content.setSelection(0, y, _content.width - 1, y);
+            else {
+                _selecting = true;
+                _content.setSelection(x, y, x, y);
+            }
+            invalidate();
+            return true;
+        }
+        if (_selecting && (event.action == MouseAction.Move || event.action == MouseAction.FocusOut)) {
+            int x, y;
+            _content.cellAt(event.x, event.y, x, y);
+            _content.selX1 = x;
+            _content.selY1 = y;
+            invalidate();
+            return true;
+        }
+        if (event.action == MouseAction.ButtonUp && event.button == MouseButton.Left) {
+            _selecting = false;
+            if (_content.hasSelection() && _content.selX0 == _content.selX1 && _content.selY0 == _content.selY1)
+                _content.clearSelection();
+            invalidate();
+            return true;
+        }
+        return super.onMouseEvent(event);
+    }
+
+    override bool onTimer(ulong id) {
+        if (id != _fxTimer)
+            return super.onTimer(id);
+        bool alive;
+        foreach (ref p; _particles) {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.18f;
+            p.life--;
+            if (p.life > 0)
+                alive = true;
+        }
+        if (!alive) {
+            _particles.length = 0;
+            cancelTimer(_fxTimer);
+            _fxTimer = 0;
+        }
+        invalidate();
+        return true;
+    }
+
+    private void ensureFxTimer() {
+        if (!_fxTimer)
+            _fxTimer = setTimer(16);
+    }
+
+    private void cursorPixels(out float x, out float y) {
+        x = _content.rc.left + _content.cursorx * _content.charw;
+        int row = _content.cursory - _content.topLine;
+        y = _content.rc.top + row * _content.charh + _content.charh / 2;
+    }
+
+    private void burstAtCursor(int count, float speed) {
+        float x, y;
+        cursorPixels(x, y);
+        uint[5] colors = [0xFFFFC14D, 0xFFFF6B2C, 0xFFFFF1A8, 0xFFFF3B30, 0xFFFFFFFF];
+        for (int i = 0; i < count; i++) {
+            float ang = uniform(0.0f, cast(float)(2.0 * PI), _rnd);
+            float sp = uniform(0.6f, speed, _rnd);
+            TermParticle p;
+            p.x = x;
+            p.y = y;
+            p.vx = cos(ang) * sp;
+            p.vy = sin(ang) * sp - uniform(0.0f, 2.0f, _rnd);
+            p.size = uniform(1.5f, 4.0f, _rnd);
+            p.color = colors[uniform(0, colors.length, _rnd)];
+            p.life = uniform(10, 28, _rnd);
+            p.lifeMax = p.life;
+            _particles ~= p;
+        }
+        if (_particles.length > 800)
+            _particles = _particles[$ - 800 .. $];
+        ensureFxTimer();
+    }
+
+    private void drawParticles(DrawBuf buf) {
+        foreach (p; _particles) {
+            if (p.life <= 0)
+                continue;
+            ubyte a = cast(ubyte)(255 * p.life / (p.lifeMax ? p.lifeMax : 1));
+            uint c = (p.color & 0x00FFFFFF) | (a << 24);
+            int s = cast(int)p.size;
+            if (s < 1) s = 1;
+            buf.fillRect(Rect(cast(int)p.x, cast(int)p.y, cast(int)p.x + s, cast(int)p.y + s), c);
+        }
+    }
+
+    void copySelection() {
+        auto text = _content.selectedText();
+        if (text.length)
+            platform.setClipboardText(text);
+    }
+
+    void pasteClipboard() {
+        dstring text = platform.getClipboardText();
+        if (text.length)
+            handleTextInput(text);
+    }
+
+    private bool onTermMenu(const Action a) {
+        switch (a.id) {
+            case TermMenu.Copy:
+                copySelection();
+                return true;
+            case TermMenu.Paste:
+                pasteClipboard();
+                return true;
+            case TermMenu.SelectAll:
+                _content.selectAll();
+                invalidate();
+                return true;
+            case TermMenu.ToggleFx:
+                effects = !effects;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void showTermMenu(int x, int y) {
+        import dlangui.widgets.menu;
+        import dlangui.widgets.popup;
+        auto menu = new MenuItem();
+        menu.add(new Action(TermMenu.Copy, "Copy"d));
+        menu.add(new Action(TermMenu.Paste, "Paste"d));
+        menu.add(new Action(TermMenu.SelectAll, "Select All"d));
+        menu.add(new Action(TermMenu.ToggleFx, effects ? "Effects On"d : "Effects Off"d));
+        menu.menuItemAction = &onTermMenu;
+        if (window)
+            window.showPopup(new PopupMenu(menu), this, PopupAlign.Point, x, y);
     }
 
     private char[] outputBuffer;
@@ -694,6 +978,39 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
         _device.write(chars.toUTF8);
     }
 
+    private void replyToHost(string s) {
+        if (_device && s.length)
+            _device.write(s);
+    }
+
+    /// Answer xterm terminfo queries so fish does not time out and print the raw request.
+    /// Status 0 means the capability is unknown, which is enough for fish to move on.
+    private void replyXtGetTcap(dchar[] payload) {
+        if (payload.length < 2 || payload[0] != '+' || payload[1] != 'q')
+            return;
+        dchar[] hex = payload[2 .. $];
+        size_t p = 0;
+        while (p < hex.length) {
+            size_t end = p;
+            while (end < hex.length && hex[end] != ';')
+                end++;
+            if (end > p) {
+                char[] out_;
+                out_ ~= 0x1b;
+                out_ ~= 'P';
+                out_ ~= '0';
+                out_ ~= '+';
+                out_ ~= 'r';
+                foreach (ch; hex[p .. end])
+                    out_ ~= cast(char) ch;
+                out_ ~= 0x1b;
+                out_ ~= '\\';
+                replyToHost(cast(string) out_);
+            }
+            p = end + 1;
+        }
+    }
+
     void resetTerminal() {
         _content.clear();
         _content.updateScrollBar(_verticalScrollBar);
@@ -729,9 +1046,9 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
                         int param2 = -1;
                         int[] extraParams;
                         int index = i + 2;
-                        bool questionMark = false;
-                        if (index < outputChars.length && outputChars[index] == '?') {
-                            questionMark = true;
+                        dchar priv = 0;
+                        if (index < outputChars.length && (outputChars[index] == '?' || outputChars[index] == '>' || outputChars[index] == '=')) {
+                            priv = outputChars[index];
                             index++;
                         }
                         parseParam(outputChars, index, param1);
@@ -746,6 +1063,8 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
                             if (n >= 0)
                                 extraParams ~= n;
                         }
+                        while (index < outputChars.length && outputChars[index] >= 0x20 && outputChars[index] <= 0x2F)
+                            index++;
                         if (index >= outputChars.length)
                             break; // unfinished sequence: not enough chars
                         int param1def1 = param1 >= 1 ? param1 : 1;
@@ -788,6 +1107,27 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
                             _content.eraseScreen(param1, ch3 == 'K');
                             continue;
                         }
+                        if (ch3 == 'c') {
+                            // Primary / secondary device attributes. Fish waits ~10s if unanswered.
+                            if (priv == '>')
+                                replyToHost("\x1b[>0;0;0c");
+                            else
+                                replyToHost("\x1b[?64;1;2;6;9;15;22c");
+                            continue;
+                        }
+                        if (ch3 == 'n' && param1 == 5) {
+                            replyToHost("\x1b[0n");
+                            continue;
+                        }
+                        if (ch3 == 'n' && param1 == 6) {
+                            int row = _content.cursory - _content.topLine + 1;
+                            int col = _content.cursorx + 1;
+                            if (row < 1) row = 1;
+                            if (col < 1) col = 1;
+                            import std.conv : to;
+                            replyToHost("\x1b[" ~ to!string(row) ~ ";" ~ to!string(col) ~ "R");
+                            continue;
+                        }
                     } else switch(ch2) {
                     case 'c':
                         _content.resetTerminal();
@@ -808,6 +1148,30 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
                         i++;
                         // ignore
                         break;
+                    case 'P': {
+                        // DCS — consume until BEL or ST. Fish XTGETTCAP is ESC P + q <hex> ST.
+                        uint start = i + 2;
+                        uint j = start;
+                        bool closed = false;
+                        while (j < outputChars.length) {
+                            if (outputChars[j] == '\x07') {
+                                replyXtGetTcap(outputChars[start .. j]);
+                                i = j;
+                                closed = true;
+                                break;
+                            }
+                            if (outputChars[j] == '\x1b' && j + 1 < outputChars.length && outputChars[j + 1] == '\\') {
+                                replyXtGetTcap(outputChars[start .. j]);
+                                i = j + 1;
+                                closed = true;
+                                break;
+                            }
+                            j++;
+                        }
+                        if (!closed)
+                            unfinished = true;
+                        break;
+                    }
                     case ']': {
                         // OSC sequence — consume until BEL (\007) or ST (ESC \)
                         // Format: ESC ] Ps ; Pt BEL  or  ESC ] Ps ; Pt ESC \
@@ -870,17 +1234,49 @@ class TerminalWidget : WidgetGroup, OnScrollHandler {
 
     /// override to handle focus changes
     override protected void handleFocusChange(bool focused, bool receivedFocusFromKeyboard = false) {
-        if (focused)
+        if (focused) {
             _content.focused = true;
-        else {
+            if (hostFocus)
+                hostFocus(this);
+        } else {
             _content.focused = false;
         }
         super.handleFocusChange(focused);
     }
 
+    private int _ptyCols, _ptyRows;
+    private void notifyPtySize() {
+        version (Posix) {
+            if (!_device)
+                return;
+            int cols = _content.width;
+            int rows = _content.height;
+            if (cols == _ptyCols && rows == _ptyRows)
+                return;
+            _ptyCols = cols;
+            _ptyRows = rows;
+            _device.setWindowSize(cols, rows, cols * _content.charw, rows * _content.charh);
+        }
+    }
+
 }
 
 import core.thread;
+import std.math : PI, cos, sin;
+import std.random : Random, uniform, unpredictableSeed;
+
+struct TermParticle {
+    float x, y, vx, vy, size;
+    uint color;
+    int life, lifeMax;
+}
+
+enum TermMenu : int {
+    Copy = 92001,
+    Paste = 92002,
+    SelectAll = 92003,
+    ToggleFx = 92004,
+}
 
 interface TerminalInputHandler {
     void onBytesReceived(string data);
@@ -1135,6 +1531,22 @@ class TerminalDevice : Thread {
             _shellPid = pid;
             Log.i("TerminalDevice: spawned shell pid=", pid, " on ", _name);
             return true;
+        }
+
+        void setWindowSize(int cols, int rows, int xpix, int ypix) {
+            import core.sys.posix.sys.ioctl : ioctl, TIOCSWINSZ, winsize;
+            import core.sys.posix.signal : kill;
+            enum SIGWINCH = 28;
+            if (masterfd <= 0 || cols < 2 || rows < 2)
+                return;
+            winsize ws;
+            ws.ws_col = cast(ushort) cols;
+            ws.ws_row = cast(ushort) rows;
+            ws.ws_xpixel = cast(ushort) xpix;
+            ws.ws_ypixel = cast(ushort) ypix;
+            ioctl(masterfd, TIOCSWINSZ, &ws);
+            if (_shellPid > 0)
+                kill(_shellPid, SIGWINCH);
         }
 
         void killShell() {
