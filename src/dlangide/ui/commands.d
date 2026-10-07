@@ -100,6 +100,8 @@ enum IDEActions : int
     AIChatToggle,
     AINewConversation,
     AIImportChatGPT,
+    AIAskSelection,
+    AICodeSuggestions,
 
     // Design & Style Actions
     ViewFontShowcase,
@@ -305,6 +307,10 @@ const Action ACTION_AI_NEW_CONVERSATION = (
     new Action(IDEActions.AINewConversation, "MENU_AI_NEW_CONVERSATION"c, null, KeyCode.KEY_N, KeyFlag.Control | KeyFlag.Shift));
 const Action ACTION_AI_IMPORT_CHATGPT = (
     new Action(IDEActions.AIImportChatGPT, "MENU_AI_IMPORT_CHATGPT"c));
+const Action ACTION_AI_ASK_SELECTION = (
+    new Action(IDEActions.AIAskSelection, "Ask About Selection"d, null, KeyCode.KEY_A, KeyFlag.Control | KeyFlag.Shift));
+const Action ACTION_AI_CODE_SUGGESTIONS = (
+    new Action(IDEActions.AICodeSuggestions, "Suggest For This File"d, null, KeyCode.KEY_S, KeyFlag.Control | KeyFlag.Shift));
 
 // Design & Style Actions
 const Action ACTION_VIEW_FONT_SHOWCASE = new Action(IDEActions.ViewFontShowcase, "MENU_VIEW_FONT_SHOWCASE"c, "font");

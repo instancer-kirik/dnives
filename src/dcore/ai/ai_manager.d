@@ -409,7 +409,7 @@ class AIManager {
 
         try {
             // Get code context
-            string contextString = _contextManager.getCodeContext(files);
+            string contextString = _contextManager.getAssistantContext(prompt, files);
 
             // Build messages
             AIMessage[] messages;

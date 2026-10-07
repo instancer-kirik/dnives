@@ -232,16 +232,22 @@ class DSourceEdit : SourceEdit, EditableContentMarksChangeListener {
         return true;
     }
 
+    /// Called after a successful save, with the path that was written.
+    void delegate(string filename) onFileSaved;
+
     /// save to the same file
     bool save() {
-        return _content.save();
+        bool res = _content.save();
+        if (res && onFileSaved)
+            onFileSaved(filename);
+        return res;
     }
 
     /// save to the same file
     override bool save(string fn) {
         bool res = super.save(fn);
-        //if (res && projectSourceFile)
-        //    projectSourceFile.setFilename(filename);
+        if (res && onFileSaved)
+            onFileSaved(filename);
         return res;
     }
 

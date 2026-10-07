@@ -1293,7 +1293,7 @@ class ChatWidget : HorizontalLayout {
 
         // Gather context
         string[] contextFiles = _fileReferences.keys;
-        string contextString = _contextManager.getCodeContext(contextFiles);
+        string contextString = _contextManager.getAssistantContext(userMessage, contextFiles);
 
         // Build message history
         AIMessage[] messages;
@@ -2030,6 +2030,21 @@ class ChatWidget : HorizontalLayout {
         return dcore.lang.language_profile.isSourceFile(filePath);
     }
 
+    /// Put text in the input box without sending it.
+    void setDraft(string text) {
+        if (!_inputBox)
+            return;
+        _inputBox.text = text.to!dstring;
+        if (_sendButton)
+            _sendButton.enabled = text.strip.length > 0;
+    }
+
+    /// Attach a source file to the current conversation context.
+    void attachFile(string filePath) {
+        if (filePath.length)
+            addFileReference(filePath);
+    }
+
     /**
      * Add file reference
      */
@@ -2095,6 +2110,19 @@ class ChatWidget : HorizontalLayout {
         }
 
         string contextText = _contextManager.getCodeContext(_fileReferences.keys);
+        if (_symbolTracker) {
+            foreach (filePath; _fileReferences.keys) {
+                auto symbols = _symbolTracker.getFileSymbols(filePath);
+                if (symbols.length == 0 && _symbolTracker.knowledgeLinks(filePath).length == 0)
+                    continue;
+                contextText ~= "\n\n" ~ baseName(filePath) ~ " graph:";
+                foreach (symbol; symbols.take(24))
+                    contextText ~= format("\n  %s %s:%d",
+                        symbol.name, baseName(symbol.filePath), symbol.location.start.line + 1);
+                foreach (link; _symbolTracker.knowledgeLinks(filePath).take(8))
+                    contextText ~= "\n  → " ~ baseName(link);
+            }
+        }
         _contextPreview.text = contextText.to!dstring;
     }
 

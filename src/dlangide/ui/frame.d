@@ -30,7 +30,8 @@ import dlangide.ui.settings;
 import dlangide.ui.debuggerui;
 import dlangide.ui.dialogs.projectdirdialog;
 import dlangide.ui.dcore_integration;
-import dlangide.ui.commands : ACTION_AI_CHAT_TOGGLE, ACTION_AI_NEW_CONVERSATION, ACTION_AI_IMPORT_CHATGPT;
+import dlangide.ui.commands : ACTION_AI_CHAT_TOGGLE, ACTION_AI_NEW_CONVERSATION, ACTION_AI_IMPORT_CHATGPT,
+    ACTION_AI_ASK_SELECTION, ACTION_AI_CODE_SUGGESTIONS;
 import dlangide.ui.fontshowcase;
 import dlangide.ui.previewpanel;
 import dlangide.ui.filepanel;
@@ -576,6 +577,7 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
             // open new file
             EditorWithHeader wrapper = new EditorWithHeader(filename);
             DSourceEdit editor = wrapper.editor;
+            editor.onFileSaved = &noteSourceSaved;
             Log.d("trying to open source file ", filename);
             if (file ? editor.load(file) : editor.load(filename))
             {
@@ -1092,6 +1094,18 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         _symbolGraphPanel.dockAlignment = DockAlignment.Right;
         _symbolGraphPanel.layoutWidth = 340;
         _symbolGraphPanel.visibility = Visibility.Gone;
+        _symbolGraphPanel.onNodeActivated = delegate(string filePath, int line) {
+            import std.file : exists, isFile;
+            if (!exists(filePath) || !isFile(filePath))
+                return false;
+            if (!openSourceFile(filePath))
+                return false;
+            if (currentEditor) {
+                currentEditor.setCaretPos(line, 0);
+                currentEditor.setFocus();
+            }
+            return true;
+        };
         _dockHost.addDockedWindow(_symbolGraphPanel);
 
         _logPanel = new OutputPanel("output");
@@ -1237,6 +1251,9 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         MenuItem aiItem = new MenuItem(new Action(35, "MENU_AI"c));
         aiItem.add(ACTION_AI_CHAT_TOGGLE);
         aiItem.add(ACTION_AI_NEW_CONVERSATION);
+        aiItem.addSeparator();
+        aiItem.add(ACTION_AI_ASK_SELECTION);
+        aiItem.add(ACTION_AI_CODE_SUGGESTIONS);
         aiItem.addSeparator();
         aiItem.add(ACTION_AI_IMPORT_CHATGPT);
 
@@ -1641,8 +1658,62 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         // Ensure the "API Keys" button in the chat widget opens our preferences dialog
         if (!ai.onShowPreferences)
             ai.onShowPreferences = &showPreferences;
+        if (!ai.currentFileProvider)
+            ai.currentFileProvider = &currentEditorFile;
+        if (!ai.currentSelectionProvider)
+            ai.currentSelectionProvider = &currentEditorSelection;
+        indexOpenProjects(ai);
 
         return ai;
+    }
+
+    string currentEditorFile() {
+        auto editor = currentEditor;
+        return editor ? editor.filename : "";
+    }
+
+    string currentEditorSelection() {
+        auto editor = currentEditor;
+        if (!editor)
+            return "";
+        return editor.getSelectedText().to!string;
+    }
+
+    void indexOpenProjects(AIIntegration ai) {
+        if (!ai || !ai.isInitialized)
+            return;
+        auto mgr = ai.getAIManager();
+        if (!mgr)
+            return;
+        auto tracker = mgr.getSymbolTracker();
+        if (!tracker)
+            return;
+
+        string[] roots;
+        if (currentWorkspace) {
+            if (currentWorkspace.dir.length)
+                roots ~= currentWorkspace.dir;
+            foreach (project; currentWorkspace.projects) {
+                if (project.dir.length)
+                    roots ~= project.dir;
+            }
+        }
+        tracker.ensureRoots(roots);
+    }
+
+    void noteSourceSaved(string filePath) {
+        auto integ = getDCoreIntegration();
+        if (!integ || !integ.isReady() || !integ.getDCore())
+            return;
+        auto ai = integ.getDCore().getAIIntegration();
+        if (!ai || !ai.isInitialized())
+            return;
+        auto mgr = ai.getAIManager();
+        if (!mgr)
+            return;
+        auto tracker = mgr.getSymbolTracker();
+        if (tracker)
+            tracker.reindexFile(filePath);
     }
 
     void handleAIChatToggle() {
@@ -1658,6 +1729,20 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
 
         import dcore.ai.integration : ActionId;
         ai.handleMenuAction(new Action(ActionId.AI_NEW_CONVERSATION, ""d));
+    }
+
+    void handleAIAskSelection() {
+        auto ai = resolveAI();
+        if (!ai) return;
+        ai.ensureOpenInHost(_dockHost);
+        ai.askAboutSelection();
+    }
+
+    void handleAICodeSuggestions() {
+        auto ai = resolveAI();
+        if (!ai) return;
+        ai.ensureOpenInHost(_dockHost);
+        ai.showCodeSuggestions();
     }
 
     void handleAIImportChatGPT() {
@@ -1721,6 +1806,12 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
                 return true;
             case IDEActions.AIImportChatGPT:
                 handleAIImportChatGPT();
+                return true;
+            case IDEActions.AIAskSelection:
+                handleAIAskSelection();
+                return true;
+            case IDEActions.AICodeSuggestions:
+                handleAICodeSuggestions();
                 return true;
             case IDEActions.ViewFontShowcase:
                 toggleFontShowcase();

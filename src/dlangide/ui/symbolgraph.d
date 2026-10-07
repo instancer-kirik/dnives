@@ -22,6 +22,7 @@ import dlangui.widgets.tabs;
 import dlangui.graphics.drawbuf;
 import dlangui.core.logger;
 
+import dcore.code.graph_query;
 import dcore.code.symbol_tracker;
 import dcore.lsp.lsptypes;
 import dcore.lang.language_profile;
@@ -240,28 +241,57 @@ class SymbolGraphWidget : Widget {
             _data.addNode(n);
         }
 
-        // Build reference edges
-        foreach (ref s; syms) {
-            string fqn = s.fullyQualifiedName.length ? s.fullyQualifiedName : s.name;
-            SymbolReference[] refs = _tracker.getReferences(s.name);
-            foreach (ref r; refs) {
-                // Add a node for the referencing file if it differs
-                if (r.filePath != filePath) {
-                    GraphNode refNode;
-                    refNode.id       = r.filePath;
-                    refNode.label    = r.filePath.baseName;
-                    refNode.filePath = r.filePath;
-                    refNode.line     = r.location.start.line;
-                    refNode.kind     = SymbolKind.File;
-                    _data.addNode(refNode);
-
-                    GraphEdge e;
-                    e.fromId       = fqn;
-                    e.toId         = refNode.id;
-                    e.isDefinition = r.isDefinition;
-                    _data.addEdge(e);
-                }
+        foreach (ref r; _tracker.outgoingReferences(filePath)) {
+            string fromId = r.fromName.length ? r.fromName : filePath;
+            if (_data.findNode(fromId) is null) {
+                GraphNode fromNode;
+                fromNode.id = fromId;
+                fromNode.label = fromId.baseName;
+                fromNode.filePath = filePath;
+                fromNode.kind = SymbolKind.File;
+                _data.addNode(fromNode);
             }
+
+            string toId = r.symbol.fullyQualifiedName.length
+                ? r.symbol.fullyQualifiedName : r.symbol.name;
+            if (toId.length == 0)
+                continue;
+            if (_data.findNode(toId) is null) {
+                GraphNode target;
+                target.id = toId;
+                target.label = r.symbol.name.length ? r.symbol.name : toId.baseName;
+                target.filePath = r.symbol.filePath.length ? r.symbol.filePath : toId;
+                target.line = r.symbol.location.start.line;
+                target.kind = r.symbol.kind == SymbolKind.File && r.referenceType == "wiki"
+                    ? SymbolKind.File : r.symbol.kind;
+                _data.addNode(target);
+            }
+
+            GraphEdge edge;
+            edge.fromId = fromId;
+            edge.toId = toId;
+            edge.isDefinition = r.referenceType == "inheritance" || r.isDefinition;
+            _data.addEdge(edge);
+        }
+
+        foreach (link; _tracker.knowledgeLinks(filePath)) {
+            if (_data.findNode(link) !is null)
+                continue;
+            GraphNode linked;
+            linked.id = link;
+            linked.label = link.baseName;
+            linked.filePath = link;
+            linked.kind = SymbolKind.File;
+            _data.addNode(linked);
+
+            GraphEdge edge;
+            edge.fromId = syms.length
+                ? (syms[0].fullyQualifiedName.length ? syms[0].fullyQualifiedName : syms[0].name)
+                : filePath;
+            if (_data.findNode(edge.fromId) is null)
+                edge.fromId = filePath;
+            edge.toId = link;
+            _data.addEdge(edge);
         }
 
         doLayout();
@@ -305,22 +335,39 @@ class SymbolGraphWidget : Widget {
         cn.isPinned = true;
         _data.addNode(cn);
 
-        // Fan out to every reference site
-        SymbolReference[] refs = _tracker.getReferences(found[0].name);
-        foreach (ref r; refs) {
-            GraphNode rn;
-            rn.id       = r.filePath ~ ":" ~ r.location.start.line.to!string;
-            rn.label    = r.filePath.baseName;
-            rn.filePath = r.filePath;
-            rn.line     = r.location.start.line;
-            rn.kind     = SymbolKind.File;
-            _data.addNode(rn);
-
-            GraphEdge e;
-            e.fromId       = centreId;
-            e.toId         = rn.id;
-            e.isDefinition = r.isDefinition;
-            _data.addEdge(e);
+        auto query = GraphQuery(_tracker);
+        foreach (ref r; query.callers(centre)) {
+            string callerId = r.fromName.length ? r.fromName : r.filePath ~ ":" ~ r.location.start.line.to!string;
+            if (_data.findNode(callerId) is null) {
+                GraphNode caller;
+                caller.id = callerId;
+                caller.label = r.fromName.length ? r.fromName.baseName : r.filePath.baseName;
+                caller.filePath = r.filePath;
+                caller.line = r.location.start.line;
+                caller.kind = SymbolKind.Function;
+                _data.addNode(caller);
+            }
+            GraphEdge edge;
+            edge.fromId = callerId;
+            edge.toId = centreId;
+            _data.addEdge(edge);
+        }
+        foreach (ref r; query.callees(centre)) {
+            string calleeId = r.symbol.fullyQualifiedName.length
+                ? r.symbol.fullyQualifiedName : r.symbol.name;
+            if (calleeId.length == 0 || _data.findNode(calleeId) !is null)
+                continue;
+            GraphNode callee;
+            callee.id = calleeId;
+            callee.label = r.symbol.name;
+            callee.filePath = r.symbol.filePath;
+            callee.line = r.symbol.location.start.line;
+            callee.kind = r.symbol.kind;
+            _data.addNode(callee);
+            GraphEdge edge;
+            edge.fromId = centreId;
+            edge.toId = calleeId;
+            _data.addEdge(edge);
         }
 
         doLayout();
@@ -671,6 +718,9 @@ class SymbolGraphPanel : DockWindow {
     private Button            _fitBtn;
     private Button            _resetBtn;
     private TextWidget        _statusBar;
+    private string            _lastFile;
+    private string            _lastSymbol;
+    private bool delegate(string filePath, int line) _nodeActivated;
 
     // ── construction ─────────────────────────────────────────────────────────
 
@@ -737,6 +787,22 @@ class SymbolGraphPanel : DockWindow {
             return true;
         };
 
+        auto scanBtn = new Button("sg_scan", "Scan"d);
+        scanBtn.fontSize(10);
+        scanBtn.tooltipText = "Rebuild the symbol and knowledge graph from the workspace"d;
+        scanBtn.click = delegate(Widget src) {
+            if (_tracker) {
+                _tracker.rescan();
+                if (_lastFile.length)
+                    showForFile(_lastFile);
+                else if (_lastSymbol.length)
+                    showForSymbol(_lastSymbol);
+                else
+                    _updateStatus();
+            }
+            return true;
+        };
+
         _statusBar = new TextWidget("sg_status", ""d);
         _statusBar.fontSize(10);
         _statusBar.textColor(0x888888);
@@ -754,6 +820,7 @@ class SymbolGraphPanel : DockWindow {
 
         toolbar.addChild(_searchBox);
         toolbar.addChild(_searchBtn);
+        toolbar.addChild(scanBtn);
         toolbar.addChild(_fitBtn);
         toolbar.addChild(_resetBtn);
         toolbar.addChild(colourModeBtn);
@@ -766,8 +833,10 @@ class SymbolGraphPanel : DockWindow {
 
         // Wire navigation callback — callers can override after construction
         _graphWidget.onNodeActivated = delegate(string fp, int line) {
+            if (_nodeActivated)
+                return _nodeActivated(fp, line);
             Log.d("SymbolGraphPanel: node activated fp=", fp, " line=", line);
-            return false; // let frame handle it
+            return false;
         };
 
         root.addChild(toolbar);
@@ -781,6 +850,8 @@ class SymbolGraphPanel : DockWindow {
     /// Load the graph for all symbols in a file.
     void showForFile(string filePath) {
         if (_graphWidget is null) return;
+        _lastFile = filePath;
+        _lastSymbol = "";
         _graphWidget.loadForFile(filePath);
         _updateStatus();
     }
@@ -788,8 +859,16 @@ class SymbolGraphPanel : DockWindow {
     /// Load the star graph for a fully-qualified symbol name.
     void showForSymbol(string fqn) {
         if (_graphWidget is null) return;
+        _lastSymbol = fqn;
         _graphWidget.loadForSymbol(fqn);
         _updateStatus();
+    }
+
+    /// Double-click on a node. Wired by the main frame to open the source.
+    @property void onNodeActivated(bool delegate(string filePath, int line) cb) {
+        _nodeActivated = cb;
+        if (_graphWidget)
+            _graphWidget.onNodeActivated = cb;
     }
 
     // ── private helpers ───────────────────────────────────────────────────────

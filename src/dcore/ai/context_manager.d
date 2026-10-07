@@ -18,6 +18,7 @@ import dlangui.core.logger;
 
 import dcore.core;
 import dcore.lang.language_profile;
+import dcore.code.graph_query;
 import dcore.code.symbol_tracker;
 import dcore.lsp.lspmanager;
 import dcore.lsp.lsptypes;
@@ -289,6 +290,30 @@ class ContextManager {
             (a.priority == b.priority && a.relevanceScore > b.relevanceScore));
 
         return renderContext(contextItems, maxTokens);
+    }
+
+    /**
+     * File context plus the symbol and knowledge-graph neighbourhood for a prompt.
+     */
+    string getAssistantContext(string prompt, string[] files, int maxTokens = 0) {
+        string[] symbolNames;
+        if (_symbolTracker) {
+            foreach (symbol; _symbolTracker.getRelevantSymbols(prompt)) {
+                string id = symbol.fullyQualifiedName.length
+                    ? symbol.fullyQualifiedName : symbol.name;
+                if (!symbolNames.canFind(id))
+                    symbolNames ~= id;
+            }
+        }
+
+        string body = getCodeContext(files, symbolNames, maxTokens);
+        if (_symbolTracker) {
+            auto query = GraphQuery(_symbolTracker);
+            string graph = query.answer(prompt, files);
+            if (graph.length)
+                body ~= "\n\n" ~ graph;
+        }
+        return body;
     }
 
     /**

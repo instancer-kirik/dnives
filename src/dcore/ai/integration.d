@@ -10,6 +10,7 @@ import std.json;
 import std.datetime;
 import std.exception;
 import std.conv;
+import std.format;
 import dlangui;
 import dlangui.core.logger;
 import dlangui.widgets.docks;
@@ -64,6 +65,10 @@ class AIIntegration {
 
     /// Wire this from IDEFrame to call showPreferences() when the user clicks "API Keys"
     void delegate() onShowPreferences;
+
+    /// Current editor file and selection. IDEFrame sets these; the DCore editor is the fallback.
+    string delegate() currentFileProvider;
+    string delegate() currentSelectionProvider;
 
     /**
      * Constructor
@@ -230,47 +235,52 @@ class AIIntegration {
      * Show AI code suggestions for current file
      */
     void showCodeSuggestions() {
-        if (!_isInitialized || !_aiManager) {
+        if (!_isInitialized || !_aiManager)
             return;
-        }
 
-        // Get current file from editor (would need editor integration)
-        string currentFile = getCurrentEditorFile();
-        if (currentFile.empty) {
+        string filePath = getCurrentEditorFile();
+        if (filePath.empty) {
             Log.w("AIIntegration: No current file for suggestions");
             return;
         }
 
-        // Generate suggestions
-        _aiManager.generateCodeSuggestions([currentFile], "Please analyze this code and provide suggestions for improvements.");
+        revealChat();
+        auto chatWidget = _aiManager.getChatWidget();
+        if (chatWidget) {
+            chatWidget.attachFile(filePath);
+            chatWidget.setDraft("Review " ~ std.path.baseName(filePath) ~ " and suggest concrete improvements.");
+        }
     }
 
     /**
      * Ask AI about current selection
      */
     void askAboutSelection() {
-        if (!_isInitialized) {
+        if (!_isInitialized || !_aiManager)
             return;
-        }
 
-        // Get current selection from editor (would need editor integration)
         string selection = getCurrentSelection();
-        string currentFile = getCurrentEditorFile();
+        string filePath = getCurrentEditorFile();
 
-        if (selection.empty) {
+        if (selection.empty && filePath.empty) {
             Log.w("AIIntegration: No text selected");
             return;
         }
 
-        // Show chat and pre-fill with question about selection
-        toggleAIChat();
-
+        revealChat();
         auto chatWidget = _aiManager.getChatWidget();
-        if (chatWidget) {
-            // Pre-fill input with context about selection
-            string prompt = format("Please explain this code:\n\n```%s\n%s\n```",
-                                 getFileLanguage(currentFile), selection);
-            // Would need method to set input text in chat widget
+        if (!chatWidget)
+            return;
+
+        if (filePath.length)
+            chatWidget.attachFile(filePath);
+
+        if (selection.length) {
+            chatWidget.setDraft(format("Explain this code from %s:\n\n```%s\n%s\n```",
+                filePath.length ? std.path.baseName(filePath) : "the editor",
+                getFileLanguage(filePath), selection));
+        } else {
+            chatWidget.setDraft("Explain the current file, " ~ std.path.baseName(filePath) ~ ".");
         }
     }
 
@@ -282,16 +292,17 @@ class AIIntegration {
             return;
         }
 
-        string currentFile = getCurrentEditorFile();
-        if (currentFile.empty) {
+        string filePath = getCurrentEditorFile();
+        if (filePath.empty)
             return;
-        }
 
-        // Create a code session for tracking changes
         string sessionId = _aiManager.startCodeSession("AI Refactoring Session");
-
-        // Show chat and suggest refactoring
-        toggleAIChat();
+        revealChat();
+        auto chatWidget = _aiManager.getChatWidget();
+        if (chatWidget) {
+            chatWidget.attachFile(filePath);
+            chatWidget.setDraft("Refactor " ~ std.path.baseName(filePath) ~ ". Say what you would change and why.");
+        }
 
         Log.i("AIIntegration: Started refactoring session: ", sessionId);
     }
@@ -622,17 +633,26 @@ class AIIntegration {
     /**
      * Get current file from editor (placeholder)
      */
+    private void revealChat() {
+        if (_aiChatDock)
+            _aiChatDock.visibility = Visibility.Visible;
+    }
+
     private string getCurrentEditorFile() {
-        // This would integrate with the editor system
-        // For now, return empty string
+        if (currentFileProvider) {
+            string path = currentFileProvider();
+            if (path.length)
+                return path;
+        }
         return "";
     }
 
     /**
-     * Get current text selection (placeholder)
+     * Get current text selection
      */
     private string getCurrentSelection() {
-        // This would integrate with the editor system
+        if (currentSelectionProvider)
+            return currentSelectionProvider();
         return "";
     }
 
