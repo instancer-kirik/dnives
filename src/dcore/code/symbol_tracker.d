@@ -152,6 +152,9 @@ class SymbolTracker {
      * Add a file to the watch list
      */
     void addFileToWatch(string filePath) {
+        if (filePath.length == 0)
+            return;
+        filePath = buildNormalizedPath(filePath);
         if (_watchedFiles.canFind(filePath))
             return;
 
@@ -219,6 +222,8 @@ class SymbolTracker {
 
     SymbolReference[] outgoingReferences(string filePath) {
         auto existing = filePath in _references;
+        if (existing is null)
+            existing = buildNormalizedPath(filePath) in _references;
         return existing ? (*existing).dup : [];
     }
 
@@ -284,25 +289,59 @@ class SymbolTracker {
     }
 
     private void walkSources(string dirPath, ref string[] files) {
-        if (files.length >= 2000)
+        if (files.length >= 4000)
             return;
+        DirEntry[] dirs;
         foreach (DirEntry entry; dirEntries(dirPath, SpanMode.shallow)) {
             string name = baseName(entry.name);
             if (entry.isDir) {
-                if (skipIndexDir(name))
-                    continue;
-                walkSources(entry.name, files);
+                if (!skipIndexDir(name))
+                    dirs ~= entry;
             } else if (entry.isFile && shouldIndex(entry.name)) {
-                files ~= entry.name;
-                if (files.length >= 2000)
+                files ~= buildNormalizedPath(entry.name);
+                if (files.length >= 4000)
                     return;
             }
+        }
+        dirs.sort!((a, b) => dirRank(baseName(a.name)) < dirRank(baseName(b.name)));
+        foreach (dir; dirs)
+            walkSources(dir.name, files);
+    }
+
+    private static int dirRank(string name) {
+        switch (name) {
+            case "lib":
+            case "src":
+            case "source":
+            case "app":
+            case "test":
+            case "tests":
+                return 0;
+            default:
+                return 1;
         }
     }
 
     private static bool skipIndexDir(string name) {
-        return name.startsWith(".") || name == "bin" || name == "lib"
-            || name == "node_modules" || name == "stash" || name == "__pycache__";
+        if (name.startsWith("."))
+            return true;
+        switch (name) {
+            case "node_modules":
+            case "stash":
+            case "__pycache__":
+            case "_build":
+            case "deps":
+            case "ebin":
+            case "_checkouts":
+            case "target":
+            case "vendor":
+            case "bower_components":
+            case "dist":
+            case "coverage":
+                return true;
+            default:
+                return false;
+        }
     }
 
     private bool shouldIndex(string filePath) {
@@ -542,13 +581,18 @@ class SymbolTracker {
      */
     CodeSymbol[] getFileSymbols(string filePath) {
         CodeSymbol[] results;
+        if (filePath.length == 0)
+            return results;
 
-        if (filePath in _fileSymbols) {
-            foreach (symbolName; _fileSymbols[filePath]) {
-                if (symbolName in _symbols) {
-                    results ~= _symbols[symbolName];
-                }
-            }
+        auto listed = filePath in _fileSymbols;
+        if (listed is null)
+            listed = buildNormalizedPath(filePath) in _fileSymbols;
+        if (listed is null)
+            return results;
+
+        foreach (symbolName; *listed) {
+            if (symbolName in _symbols)
+                results ~= _symbols[symbolName];
         }
 
         return results;
@@ -824,7 +868,7 @@ class SymbolTracker {
 
             if (bases.length) {
                 foreach (part; bases.split(",")) {
-                    string base = part.strip().split(" ")[0].strip();
+                    string base = firstToken(part);
                     auto bang = base.indexOf("!");
                     if (bang > 0)
                         base = base[0 .. bang];
@@ -939,15 +983,16 @@ class SymbolTracker {
         auto m = stripped.matchFirst(fromRe);
         if (!m.empty) {
             foreach (part; m[2].split(",")) {
-                string name = part.strip().split(" ")[0].strip();
-                if (name.length && name != "*")
+                string name = firstToken(part);
+                if (name.length && name != "*" && name != "(")
                     noteImport(filePath, name, line, stripped);
             }
             return;
         }
         if (stripped.startsWith("import ")) {
-            string spec = stripped[7 .. $].split(" ")[0].strip();
-            noteImport(filePath, spec, line, stripped);
+            string spec = firstToken(stripped[7 .. $]);
+            if (spec.length)
+                noteImport(filePath, spec, line, stripped);
         }
     }
 
@@ -1021,6 +1066,14 @@ class SymbolTracker {
         return symbol;
     }
 
+    private static string firstToken(string text) {
+        text = text.strip();
+        if (text.length == 0)
+            return "";
+        auto space = text.indexOf(' ');
+        return space < 0 ? text : text[0 .. space];
+    }
+
     private static bool matchDeclaration(string language, string stripped,
             ref string kindWord, ref string name, ref string bases, ref bool isFunc) {
         kindWord = "";
@@ -1054,6 +1107,24 @@ class SymbolTracker {
                 return true;
             }
             auto defMatch = stripped.matchFirst(regex(`^def\s+(?:self\.)?(\w+)`));
+            if (!defMatch.empty) {
+                kindWord = "def";
+                name = defMatch[1];
+                isFunc = true;
+                return true;
+            }
+            return false;
+        }
+
+        if (language == "elixir") {
+            auto modMatch = stripped.matchFirst(regex(`^defmodule\s+([A-Za-z_][\w.]*)`));
+            if (!modMatch.empty) {
+                kindWord = "defmodule";
+                name = modMatch[1];
+                return true;
+            }
+            auto defMatch = stripped.matchFirst(regex(
+                `^(?:def|defp|defmacro|defmacrop|defguard|defguardp)\s+([A-Za-z_][\w!?]*|[\+\-\*\/=!<>]+)`));
             if (!defMatch.empty) {
                 kindWord = "def";
                 name = defMatch[1];
@@ -1116,6 +1187,7 @@ class SymbolTracker {
             case "enum": return SymbolKind.Enum;
             case "impl":
             case "object": return SymbolKind.Class;
+            case "defmodule": return SymbolKind.Module;
             default: return SymbolKind.Class;
         }
     }

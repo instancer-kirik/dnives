@@ -109,6 +109,7 @@ enum IDEActions : int
 
     // Artifact Context Actions
     ViewArtifactPanel,
+    ViewSymbolGraph,
     ArtifactCopyText,
     ArtifactCopyJson,
     ArtifactRunTransform,
@@ -318,6 +319,7 @@ const Action ACTION_VIEW_PREVIEW_PANEL = new Action(IDEActions.ViewPreviewPanel,
 
 // Artifact Context Actions
 const Action ACTION_VIEW_ARTIFACT_PANEL = new Action(IDEActions.ViewArtifactPanel, "MENU_VIEW_ARTIFACT_PANEL"c);
+const Action ACTION_VIEW_SYMBOL_GRAPH = new Action(IDEActions.ViewSymbolGraph, "Symbol Graph"d);
 const Action ACTION_ARTIFACT_COPY_TEXT = new Action(IDEActions.ArtifactCopyText, "MENU_ARTIFACT_COPY_TEXT"c);
 const Action ACTION_ARTIFACT_COPY_JSON = new Action(IDEActions.ArtifactCopyJson, "MENU_ARTIFACT_COPY_JSON"c);
 const Action ACTION_ARTIFACT_RUN_TRANSFORM = new Action(IDEActions.ArtifactRunTransform, "MENU_ARTIFACT_RUN_TRANSFORM"c);

@@ -307,7 +307,7 @@ class SymbolGraphWidget : Widget {
         if (_tracker is null || fqn.length == 0) return;
 
         // Find the centre symbol
-        CodeSymbol[] found = _tracker.findSymbols(fqn);
+        CodeSymbol[] found = _tracker.searchSymbols(fqn, 20);
         if (found.length == 0) {
             Log.w("SymbolGraphWidget: no symbol found for '", fqn, "'");
             invalidate();
@@ -539,12 +539,12 @@ class SymbolGraphWidget : Widget {
             // Empty state hint
             auto f = FontManager.instance.getFont(12, 400, false, FontFamily.SansSerif, "");
             if (f !is null) {
-                dstring hint = "No symbols loaded — open a file or search a symbol"d;
+                dstring hint = "No symbols for this file. Search a name above, or press Scan."d;
                 int tw = f.textSize(hint).x;
                 f.drawText(buf,
                     rc.left + (rc.width  - tw) / 2,
                     rc.top  + (rc.height - f.height) / 2,
-                    hint, 0x555555);
+                    hint, 0xBBBBBB);
             }
             return;
         }
@@ -878,11 +878,18 @@ class SymbolGraphPanel : DockWindow {
         showForSymbol(query);
     }
 
+    void setStatus(string message) {
+        if (_statusBar)
+            _statusBar.text = message.to!dstring;
+    }
+
     private void _updateStatus() {
         if (_statusBar is null || _graphWidget is null) return;
         string s = format("%d nodes  %d edges",
                           _graphWidget.nodeCount,
                           _graphWidget.edgeCount);
+        if (_graphWidget.nodeCount == 0 && _lastFile.length)
+            s ~= " — nothing indexed in " ~ baseName(_lastFile);
         _statusBar.text = s.to!dstring;
     }
 }

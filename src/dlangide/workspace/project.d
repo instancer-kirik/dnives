@@ -586,6 +586,12 @@ class Project : WorkspaceItem
     protected SettingsFile _projectFile;
     protected ProjectSettings _settingsFile;
     protected bool _isDependency;
+    protected bool _keepAsDirectory;
+
+    /// When set, opening a directory keeps that directory instead of switching to dub.json.
+    @property void keepAsDirectory(bool value) {
+        _keepAsDirectory = value;
+    }
     protected bool _isSubproject;
     protected bool _isEmbeddedSubproject;
     protected dstring _baseProjectName;
@@ -1148,11 +1154,13 @@ class Project : WorkspaceItem
         if (fname.length > 0)
             filename = fname;
 
-        // If _filename is a directory, look for a package file inside it
+        // If _filename is a directory, look for a package file inside it.
+        // A directory the user chose stays that directory. dub.json is loaded
+        // only when they open the package file itself.
         string fileToLoad = _filename;
         if (_filename.exists && _filename.isDir)
         {
-            string packageFile = DubPackageFinder.findPackageFile(_filename);
+            string packageFile = _keepAsDirectory ? null : DubPackageFinder.findPackageFile(_filename);
             if (packageFile)
             {
                 fileToLoad = packageFile;

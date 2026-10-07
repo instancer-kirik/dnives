@@ -31,7 +31,7 @@ import dlangide.ui.debuggerui;
 import dlangide.ui.dialogs.projectdirdialog;
 import dlangide.ui.dcore_integration;
 import dlangide.ui.commands : ACTION_AI_CHAT_TOGGLE, ACTION_AI_NEW_CONVERSATION, ACTION_AI_IMPORT_CHATGPT,
-    ACTION_AI_ASK_SELECTION, ACTION_AI_CODE_SUGGESTIONS;
+    ACTION_AI_ASK_SELECTION, ACTION_AI_CODE_SUGGESTIONS, ACTION_VIEW_SYMBOL_GRAPH;
 import dlangide.ui.fontshowcase;
 import dlangide.ui.previewpanel;
 import dlangide.ui.filepanel;
@@ -636,6 +636,24 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
         _wsPanel.activate();
     }
 
+    /// Open the symbol graph. Uses the current file when one is open.
+    void showSymbolGraph()
+    {
+        auto editor = currentEditor;
+        if (editor && editor.filename.length)
+            showSymbolGraphForFile(editor.filename);
+        else {
+            ensureSymbolTrackerWired();
+            auto ai = resolveAI(false);
+            if (ai)
+                indexOpenProjects(ai);
+            if (_symbolGraphPanel) {
+                _symbolGraphPanel.visibility = Visibility.Visible;
+                _symbolGraphPanel.setFocus();
+            }
+        }
+    }
+
     static immutable SYMBOL_GRAPH_DOCK_ID = "symbolGraphPanel";
 
     /// Lazily resolve the SymbolTracker from the AI subsystem and inject it
@@ -656,12 +674,14 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
     /// Show the symbol graph for all symbols in the given file.
     void showSymbolGraphForFile(string filePath)
     {
-        ensureSymbolTrackerWired();
         if (_symbolGraphPanel) {
-            _symbolGraphPanel.showForFile(filePath);
             _symbolGraphPanel.visibility = Visibility.Visible;
+            _symbolGraphPanel.setStatus("Indexing workspace…");
             _symbolGraphPanel.setFocus();
         }
+        ensureSymbolTrackerWired();
+        if (_symbolGraphPanel)
+            _symbolGraphPanel.showForFile(filePath);
     }
 
     /// Show the symbol graph centred on a fully-qualified symbol name.
@@ -1083,6 +1103,7 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
             browse(dirName(path));
             return true;
         };
+        _filePanel.workspaceActionListener = &handleAction;
         _filePanel.onSymbolGraphRequest = delegate(string path) {
             showSymbolGraphForFile(path);
             return true;
@@ -1183,7 +1204,7 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
 
         MenuItem viewItem = new MenuItem(new Action(3, "MENU_VIEW"));
         viewItem.add(ACTION_WINDOW_SHOW_HOME_SCREEN, ACTION_WINDOW_SHOW_WORKSPACE_EXPLORER, ACTION_WINDOW_SHOW_LOG_WINDOW,
-            ACTION_VIEW_ARTIFACT_PANEL);
+            ACTION_VIEW_ARTIFACT_PANEL, ACTION_VIEW_SYMBOL_GRAPH);
         viewItem.addSeparator();
         viewItem.addCheck(ACTION_VIEW_TOGGLE_TOOLBAR);
         viewItem.addCheck(ACTION_VIEW_TOGGLE_STATUSBAR);
@@ -1990,6 +2011,9 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
             case IDEActions.WindowShowWorkspaceExplorer:
                 showWorkspaceExplorer();
                 return true;
+            case IDEActions.ViewSymbolGraph:
+                showSymbolGraph();
+                return true;
             case IDEActions.WindowShowLogWindow:
                 _logPanel.activateLogTab();
                 return true;
@@ -2020,17 +2044,15 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
                     openFileOrWorkspace(a.stringParam);
                     return true;
                 }
-                // Ask user for workspace to open
+                // Confirm the folder you are in. A nested assets.dlangidews must not win.
                 UIString caption = UIString.fromId("HEADER_OPEN_WORKSPACE_OR_PROJECT"c);
-                FileDialog dlg = createFileDialog(caption, DialogFlag.Modal | DialogFlag.Resizable | FileDialogFlag
-                        .EnableCreateDirectory);
-                dlg.addFilter(FileFilterEntry(UIString.fromId("WORKSPACE_AND_PROJECT_FILES"c),
-                    "*.dlangidews;dub.json;dub.sdl;package.json;mix.exs;Cargo.toml;go.mod;pyproject.toml;CMakeLists.txt;Makefile;build.zig;composer.json;Gemfile;pom.xml;build.gradle;build.gradle.kts"));
-                dlg.addFilter(FileFilterEntry(UIString.fromRaw("All Files"d), "*"));
-                dlg.allowMultipleFiles = false;
+                ProjectDirectoryDialog dlg = new ProjectDirectoryDialog(
+                    caption, window, null,
+                    DialogFlag.Modal | DialogFlag.Resizable |
+                        FileDialogFlag.SelectDirectory | FileDialogFlag.FileMustExist);
                 dlg.path = _settings.getRecentPath("FILE_OPEN_WORKSPACE_PATH");
                 dlg.dialogResult = delegate(Dialog d, const Action result) {
-                    if (result.id == ACTION_OPEN.id)
+                    if (result.id == ACTION_OPEN.id || result.id == ACTION_OPEN_DIRECTORY.id)
                     {
                         string filename = result.stringParam;
                         if (filename.length)
@@ -3002,6 +3024,7 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
 
             Log.f("Using project path: ", projectPath);
             Project project = new Project(currentWorkspace, projectPath);
+            project.keepAsDirectory = true;
             project.name = toUTF32(baseName(projectPath));
             Log.f("Created project with filename: ", project.filename);
 

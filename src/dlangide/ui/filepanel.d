@@ -100,14 +100,14 @@ class FilePanel : DockWindow {
         _toolbar.backgroundColor = 0x252526;
         _toolbar.padding(Rect(2, 2, 2, 2));
 
-        auto btnRefresh = new ImageButton("fp_btn_refresh", "view-refresh");
+        auto btnRefresh = new Button("fp_btn_refresh", "Refresh"d);
         btnRefresh.tooltipText = "Refresh"d;
         btnRefresh.click = delegate(Widget src) {
             reloadItems();
             return true;
         };
 
-        auto btnNewFile = new ImageButton("fp_btn_newfile", "document-new");
+        auto btnNewFile = new Button("fp_btn_newfile", "New file"d);
         btnNewFile.tooltipText = "New File"d;
         btnNewFile.click = delegate(Widget src) {
             if (workspaceActionListener.assigned)
@@ -115,7 +115,7 @@ class FilePanel : DockWindow {
             return true;
         };
 
-        auto btnNewFolder = new ImageButton("fp_btn_newfolder", "folder-new");
+        auto btnNewFolder = new Button("fp_btn_newfolder", "New folder"d);
         btnNewFolder.tooltipText = "New Folder"d;
         btnNewFolder.click = delegate(Widget src) {
             if (workspaceActionListener.assigned)
@@ -235,6 +235,8 @@ class FilePanel : DockWindow {
         case ProjectItemType.SourceFolder:
             appendAction(menu, ACTION_FILE_NEW_SOURCE_FILE.clone(), item);
             appendAction(menu, ACTION_FILE_NEW_DIRECTORY.clone(),   item);
+            menu.addSeparator();
+            appendCustom(menu, FilePanelAction.ShowSymbolGraph,  "Show Symbol Graph"d,  item);
             menu.addSeparator();
             appendCustom(menu, FilePanelAction.Rename,           "Rename"d,             item);
             appendCustom(menu, FilePanelAction.DeleteFolder,     "Delete Folder"d,      item);
