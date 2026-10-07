@@ -23,6 +23,32 @@ bool isProjectFile(in string filename) pure nothrow
         filename.baseName.equal("dub.sdl") || filename.baseName.equal("DUB.SDL");
 }
 
+/// Project roots from other languages. These are opened as a directory, not as dub.json.
+bool isExternalProjectMarker(in string filename) pure nothrow
+{
+    switch (filename.baseName)
+    {
+        case "mix.exs":
+        case "Cargo.toml":
+        case "go.mod":
+        case "pyproject.toml":
+        case "setup.py":
+        case "CMakeLists.txt":
+        case "Makefile":
+        case "makefile":
+        case "shard.yml":
+        case "build.zig":
+        case "composer.json":
+        case "Gemfile":
+        case "pom.xml":
+        case "build.gradle":
+        case "build.gradle.kts":
+            return true;
+        default:
+            return false;
+    }
+}
+
 string toForwardSlashSeparator(in string filename) pure nothrow
 {
     char[] res;
@@ -256,12 +282,13 @@ class ProjectFolder : ProjectItem
     private static immutable string[] EXCLUDED_DIRS = [
         "node_modules", ".git", ".svn", ".hg", ".vs",
         ".idea", ".vscode", "bin", "obj", "dist",
-        "build", "target", "out", "output", "logs",
+        "build", "_build", "target", "out", "output", "logs",
         ".venv", "__pycache__", "venv", "env", ".env",
         "cache", ".cache", "tmp", ".tmp", "temp", ".temp",
-        "vendor", "packages", "dist-newstyle", "deps",
-        ".pytest_cache", "__pycache__", ".mypy_cache", ".hypothesis",
-        "bower_components", ".sass-cache", "coverage", "node_modules.nosync"
+        "vendor", "packages", "dist-newstyle", "deps", "_checkouts",
+        ".pytest_cache", ".mypy_cache", ".hypothesis", ".elixir_ls",
+        "bower_components", ".sass-cache", "coverage", "node_modules.nosync",
+        ".dub", "ebin"
     ];
 
     // Check if a directory should be excluded from indexing

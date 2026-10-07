@@ -16,7 +16,7 @@ import dlangui.dialogs.filedlg;
 import dlangui.dialogs.settingsdialog;
 import dlangui.core.stdaction;
 import dlangui.core.files;
-import std.file : exists, isDir;
+import std.file : exists, isDir, isFile;
 
 import dlangide.ui.commands;
 import dlangide.ui.wspanel;
@@ -2024,7 +2024,8 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
                 UIString caption = UIString.fromId("HEADER_OPEN_WORKSPACE_OR_PROJECT"c);
                 FileDialog dlg = createFileDialog(caption, DialogFlag.Modal | DialogFlag.Resizable | FileDialogFlag
                         .EnableCreateDirectory);
-                dlg.addFilter(FileFilterEntry(UIString.fromId("WORKSPACE_AND_PROJECT_FILES"c), "*.dlangidews;dub.json;dub.sdl;package.json"));
+                dlg.addFilter(FileFilterEntry(UIString.fromId("WORKSPACE_AND_PROJECT_FILES"c),
+                    "*.dlangidews;dub.json;dub.sdl;package.json;mix.exs;Cargo.toml;go.mod;pyproject.toml;CMakeLists.txt;Makefile;build.zig;composer.json;Gemfile;pom.xml;build.gradle;build.gradle.kts"));
                 dlg.addFilter(FileFilterEntry(UIString.fromRaw("All Files"d), "*"));
                 dlg.allowMultipleFiles = false;
                 dlg.path = _settings.getRecentPath("FILE_OPEN_WORKSPACE_PATH");
@@ -2949,8 +2950,13 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
                 createNewWorkspaceForExistingProject(project);
             }
         }
-        else if (filename.exists && filename.isDir)
+        else if (filename.exists && (filename.isDir || (filename.isFile && filename.isExternalProjectMarker)))
         {
+            if (filename.isFile)
+            {
+                filename = dirName(filename);
+                userSelectedPath = filename;
+            }
             // Handle opening a generic directory as a project
             _logPanel.clear();
             _logPanel.logLine("Opening directory as project: "d ~ toUTF32(userSelectedPath));
@@ -3313,9 +3319,13 @@ class IDEFrame : AppFrame, ProgramExecutionStatusListener, BreakpointListChangeL
                 _projectConfigurationCombo.enabled = true;
                 _projectConfigurationCombo.itemClick.clear();
                 dstring[] items = currentWorkspace.startupProject.configurationNames;
+                if (items.length == 0)
+                    items = ["default"d];
                 _projectConfigurationCombo.items = items;
-                _projectConfigurationCombo.selectedItemIndex = currentWorkspace
-                    .startupProject.projectConfigurationIndex;
+                int configIndex = currentWorkspace.startupProject.projectConfigurationIndex;
+                if (configIndex < 0 || configIndex >= cast(int) items.length)
+                    configIndex = 0;
+                _projectConfigurationCombo.selectedItemIndex = configIndex;
                 _projectConfigurationCombo.itemClick = delegate(Widget source, int index) {
                     if (currentWorkspace)
                     {

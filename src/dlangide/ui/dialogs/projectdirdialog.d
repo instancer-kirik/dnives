@@ -9,6 +9,7 @@ import dlangui.core.files;
 import dlangui.core.logger;
 import std.path;
 import std.file;
+import std.string;
 
 /**
  * A specialized file dialog for selecting project directories.
@@ -72,59 +73,46 @@ class ProjectDirectoryDialog : FileDialog {
      */
     override bool handleAction(const Action action) {
         if (action.id == StandardAction.Open || action.id == StandardAction.OpenDirectory || action.id == StandardAction.Save) {
-            // Check if user manually typed a path in the filename field
-            string baseFilename = "";
-            if (_edFilename) {
-                baseFilename = toUTF8(_edFilename.text);
-            }
-            
-            string dirToUse = "";
-            
-            // Try explicit user selection FIRST
-            if (_userSelectedDir.length > 0) {
-                if (exists(_userSelectedDir) && isDir(_userSelectedDir)) {
-                    dirToUse = _userSelectedDir;
-                    Log.i("PROJECTDIRDIALOG: Using explicitly selected directory: ", dirToUse);
+            string dirToUse;
+
+            // A highlighted folder is the selection. The browsed path is only the fallback.
+            if (_fileList && _entries.length > 0) {
+                int row = _fileList.row;
+                if (row >= 0 && row < cast(int) _entries.length && _entries[row].isDir) {
+                    string highlighted = _entries[row].name;
+                    string leaf = baseName(highlighted);
+                    if (leaf != "." && leaf != ".." && exists(highlighted) && isDir(highlighted))
+                        dirToUse = highlighted;
                 }
             }
-            
-            // Only check manual entry if no explicit selection
-            if (dirToUse.length == 0 && baseFilename.length > 0) {
-                string fullPath;
-                // Check if it's an absolute path
-                if (isAbsolute(baseFilename)) {
-                    fullPath = baseFilename;
-                } else {
-                    // Combine with current directory
-                    fullPath = buildNormalizedPath(_path, baseFilename);
-                }
-                
-                // If it exists and is a directory, use that
-                if (exists(fullPath) && isDir(fullPath)) {
-                    dirToUse = fullPath;
-                    Log.i("PROJECTDIRDIALOG: Using manually entered directory: ", dirToUse);
+
+            if (dirToUse.length == 0 && _edFilename) {
+                string typed = toUTF8(_edFilename.text).strip;
+                if (typed.length && typed != "." && typed != "..") {
+                    string fullPath = isAbsolute(typed) ? typed : buildNormalizedPath(_path, typed);
+                    if (exists(fullPath) && isDir(fullPath))
+                        dirToUse = fullPath;
                 }
             }
-            
-            // Fall back to current directory if nothing else selected
-            if (dirToUse.length == 0) {
+
+            if (dirToUse.length == 0 && _userSelectedDir.length && exists(_userSelectedDir) && isDir(_userSelectedDir))
+                dirToUse = _userSelectedDir;
+
+            if (dirToUse.length == 0)
                 dirToUse = _path;
-                Log.i("PROJECTDIRDIALOG: Using current directory as fallback: ", dirToUse);
-            }
-            
-            // If we have a directory to return, do so
-            if (action.id == StandardAction.OpenDirectory && dirToUse.length > 0) {
-                if (exists(dirToUse) && isDir(dirToUse)) {
-                    Log.i("PROJECTDIRDIALOG: Returning directory: ", dirToUse);
-                    Action result = _action;
-                    result.stringParam = dirToUse;
-                    close(result);
-                    return true;
-                }
+
+            if (dirToUse.endsWith("/") || dirToUse.endsWith("\\"))
+                dirToUse = dirToUse[0 .. $ - 1];
+
+            if (dirToUse.length && exists(dirToUse) && isDir(dirToUse)) {
+                Log.i("PROJECTDIRDIALOG: Returning directory: ", dirToUse);
+                Action result = _action;
+                result.stringParam = dirToUse;
+                close(result);
+                return true;
             }
         }
-        
-        // For all other actions, use standard behavior
+
         return super.handleAction(action);
     }
 }
